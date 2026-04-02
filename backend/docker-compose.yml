@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./multicloud.db:/app/multicloud.db   # persist SQLite across restarts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Uncomment to use PostgreSQL instead of SQLite ──────────────────────────
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: multicloud
+  #     POSTGRES_PASSWORD: multicloud
+  #     POSTGRES_DB: multicloud
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U multicloud"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #
+  # volumes:
+  #   pgdata:
