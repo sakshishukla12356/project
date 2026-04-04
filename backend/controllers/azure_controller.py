@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.usage_history import UsageHistory
 from services import azure_service
-
+def get_azure_resources_controller():
+    return azure_service.fetch_azure_all()
 
 async def get_azure_costs(user_id: int, db: AsyncSession) -> dict:
     try:
@@ -47,3 +48,7 @@ async def _persist_snapshot(
             recorded_at=now,
         ))
     await db.flush()
+
+
+def get_azure_resources_controller():
+    return list_azure_resources()

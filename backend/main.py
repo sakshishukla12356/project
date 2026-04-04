@@ -2,6 +2,9 @@
 main.py
 FastAPI application entry point for the Multi-Cloud Dashboard.
 """
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -14,6 +17,7 @@ from fastapi.responses import JSONResponse
 from config.settings import get_settings
 from database.base import init_db
 from routers import auth, aws, azure, gcp, carbon, dashboard
+from routers.azure_routes import router as azure_router
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -91,6 +95,7 @@ app.include_router(azure.router)
 app.include_router(gcp.router)
 app.include_router(carbon.router)
 app.include_router(dashboard.router)
+app.include_router(azure_router, prefix="/api")
 
 
 # ─── Health check ────────────────────────────────────────────────────────────

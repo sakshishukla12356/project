@@ -6,6 +6,16 @@ Fetches VM usage, storage accounts, and cost management data.
 """
 from __future__ import annotations
 
+import os
+
+
+
+print("TENANT:", os.getenv("AZURE_TENANT_ID"))
+print("CLIENT:", os.getenv("AZURE_CLIENT_ID"))
+print("SECRET:", os.getenv("AZURE_CLIENT_SECRET"))
+
+
+
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
