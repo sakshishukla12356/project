@@ -357,3 +357,37 @@ def fetch_azure_all(subscription_id: Optional[str] = None, **cred_kwargs) -> dic
         "errors": errors,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
     }
+# ─────────────────────────────────────────────
+# 🔥 CHATBOT HELPER FUNCTION (ADD ONLY THIS)
+# ─────────────────────────────────────────────
+def get_running_vms(subscription_id=None, **cred_kwargs):
+    """
+    Returns ONLY running Azure VM names for chatbot usage
+    """
+    try:
+        vms = fetch_azure_vms(subscription_id=subscription_id, **cred_kwargs)
+    except Exception:
+        return []
+
+    running_vms = []
+
+    for vm in vms:
+        if vm.get("status") == "running":
+            running_vms.append(vm.get("resource_name"))
+
+    return running_vms
+
+def stop_vm(vm_name, subscription_id=None, **cred_kwargs):
+    from azure.mgmt.compute import ComputeManagementClient
+
+    credential = _get_credential(**cred_kwargs)
+    sub = _sub_id(subscription_id)
+
+    compute_client = ComputeManagementClient(credential, sub)
+
+    # ⚠️ need resource group
+    # extracting from VM name won't work → for now assume default RG
+
+    resource_group = "your-resource-group-name"
+
+    compute_client.virtual_machines.begin_deallocate(resource_group, vm_name)

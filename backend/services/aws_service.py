@@ -2,19 +2,18 @@
 services/aws_service.py
 
 FAST Multi-Region + Multi-Service AWS Fetcher
-Optimized for performance (no delay, no hang)
+Optimized + Correct + Production Ready
 """
 
 import boto3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-
-# 🔹 LIMIT REGIONS (avoid slowdown)
-MAX_REGIONS = 8
+# 🔹 LIMIT REGIONS (performance control)
+MAX_REGIONS = 10
 
 
 # ─────────────────────────────────────────────
-# 🔹 GET REGIONS (FAST)
+# 🔹 GET ALL REGIONS (AUTO)
 # ─────────────────────────────────────────────
 def get_all_regions(access_key, secret_key):
     try:
@@ -33,10 +32,11 @@ def get_all_regions(access_key, secret_key):
 
 
 # ─────────────────────────────────────────────
-# 🔹 EC2 FETCH
+# 🔹 EC2 FETCH (ONLY RUNNING)
 # ─────────────────────────────────────────────
 def fetch_ec2(region, access_key, secret_key):
     data = []
+
     try:
         ec2 = boto3.client(
             "ec2",
@@ -49,14 +49,19 @@ def fetch_ec2(region, access_key, secret_key):
 
         for r in response.get("Reservations", []):
             for i in r.get("Instances", []):
-                data.append({
-                    "service": "EC2",
-                    "id": i.get("InstanceId"),
-                    "state": i.get("State", {}).get("Name"),
-                    "region": region
-                })
-    except:
-        pass
+                state = i.get("State", {}).get("Name")
+
+                # 🔥 ONLY RUNNING INSTANCES
+                if state == "running":
+                    data.append({
+                        "service": "EC2",
+                        "id": i.get("InstanceId"),
+                        "state": state,
+                        "region": region,
+                    })
+
+    except Exception as e:
+        print(f"EC2 error in {region}:", e)
 
     return data
 
@@ -66,6 +71,7 @@ def fetch_ec2(region, access_key, secret_key):
 # ─────────────────────────────────────────────
 def fetch_rds(region, access_key, secret_key):
     data = []
+
     try:
         rds = boto3.client(
             "rds",
@@ -81,47 +87,49 @@ def fetch_rds(region, access_key, secret_key):
                 "service": "RDS",
                 "id": db.get("DBInstanceIdentifier"),
                 "state": db.get("DBInstanceStatus"),
-                "region": region
+                "region": region,
             })
-    except:
+
+    except Exception:
         pass
 
     return data
 
 
 # ─────────────────────────────────────────────
-# 🔹 SINGLE REGION WORKER (PARALLEL)
+# 🔹 SINGLE REGION SCAN
 # ─────────────────────────────────────────────
 def scan_region(region, access_key, secret_key):
     results = []
+
     results.extend(fetch_ec2(region, access_key, secret_key))
     results.extend(fetch_rds(region, access_key, secret_key))
+
     return results
 
 
 # ─────────────────────────────────────────────
-# 🔹 MAIN FETCH (FAST + PARALLEL)
+# 🔹 MAIN FETCH (AUTO REGION + PARALLEL)
 # ─────────────────────────────────────────────
 def fetch_aws_all(access_key, secret_key, region):
     all_resources = []
 
     try:
-        regions = ["us-east-1"]
+        regions = get_all_regions(access_key, secret_key)
 
-        # ⚡ PARALLEL REGION SCAN
-        with ThreadPoolExecutor(max_workers=6) as executor:
+        with ThreadPoolExecutor(max_workers=8) as executor:
             futures = [
                 executor.submit(scan_region, r, access_key, secret_key)
                 for r in regions
             ]
 
-            for future in as_completed(futures, timeout=10):
+            for future in as_completed(futures, timeout=15):
                 try:
                     all_resources.extend(future.result())
-                except:
-                    pass  # skip slow region
+                except Exception:
+                    pass
 
-        # 🔹 S3 (GLOBAL)
+        # 🔹 S3 (GLOBAL SERVICE)
         try:
             s3 = boto3.client(
                 "s3",
@@ -136,23 +144,26 @@ def fetch_aws_all(access_key, secret_key, region):
                     "service": "S3",
                     "id": bucket.get("Name"),
                     "state": "active",
-                    "region": "global"
+                    "region": "global",
                 })
 
-        except:
+        except Exception:
             pass
 
         return {
             "total_resources": len(all_resources),
-            "resources": all_resources
+            "resources": all_resources,
         }
 
     except Exception as e:
-        return {"error": str(e), "resources": []}
+        return {
+            "error": str(e),
+            "resources": [],
+        }
 
 
 # ─────────────────────────────────────────────
-# 🔹 SUMMARY (FOR DASHBOARD)
+# 🔹 SUMMARY (DASHBOARD)
 # ─────────────────────────────────────────────
 def fetch_aws_costs(access_key, secret_key, region):
     data = fetch_aws_all(access_key, secret_key, region)
@@ -169,5 +180,35 @@ def fetch_aws_costs(access_key, secret_key, region):
         "by_service": [
             {"service": k, "count": v}
             for k, v in service_count.items()
-        ]
+        ],
     }
+
+
+# ─────────────────────────────────────────────
+# 🔥 NEW: CHATBOT HELPER FUNCTION (NO BREAKAGE)
+# ─────────────────────────────────────────────
+def get_running_instances(access_key, secret_key, region):
+    """
+    Returns ONLY running EC2 instance IDs for chatbot usage
+    """
+    data = fetch_aws_all(access_key, secret_key, region)
+
+    instances = []
+
+    for r in data.get("resources", []):
+        if r["service"] == "EC2" and r["state"] == "running":
+            instances.append(r["id"])
+
+    return instances
+
+def stop_instance(instance_id, access_key=None, secret_key=None, region="us-east-1"):
+    import boto3
+
+    ec2 = boto3.client(
+        "ec2",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name=region,
+    )
+
+    ec2.stop_instances(InstanceIds=[instance_id])

@@ -25,11 +25,11 @@ class CloudAccount(Base):
     # 🆔 Optional account ID (AWS account id etc.)
     account_ref: Mapped[str] = mapped_column(String(512), nullable=True)
 
-    # 🔑 🔥 MOST IMPORTANT (ADD THIS)
+    # 🔑 AWS Credentials
     access_key: Mapped[str] = mapped_column(String(512), nullable=True)
     secret_key: Mapped[str] = mapped_column(String(512), nullable=True)
 
-    # For Azure / GCP configs
+    # 🔥 UPDATED: extra_config safer default
     extra_config: Mapped[dict] = mapped_column(JSON, nullable=True, default=dict)
 
     # ⏱️ Created time

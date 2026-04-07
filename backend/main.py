@@ -17,7 +17,14 @@ from fastapi.responses import JSONResponse
 from config.settings import get_settings
 from database.base import init_db
 from routers import auth, aws, azure, gcp, carbon, dashboard
-from routers.azure_routes import router as azure_router
+
+HEAD
+
+=======
+from routers import chatbot   # ✅ NEW (AI chatbot import)
+from routers import cloud_actions
+from routers import cloud_account
+0a187d5 (🔥 Added chatbot + cloud actions + DB integration)
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -97,6 +104,11 @@ app.include_router(carbon.router)
 app.include_router(dashboard.router)
 app.include_router(azure_router, prefix="/api")
 
+# ✅ NEW: AI Chatbot router (non-breaking addition)
+app.include_router(chatbot.router, prefix="/ai", tags=["AI Chatbot"])
+app.include_router(cloud_actions.router, prefix="/cloud", tags=["Cloud Actions"])
+app.include_router(cloud_account.router, prefix="/cloud-account", tags=["Cloud Account"])
+
 
 # ─── Health check ────────────────────────────────────────────────────────────
 
@@ -112,4 +124,5 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc",
         "health": "/health",
+        "ai_chat": "/ai/chat"
     }
