@@ -66,6 +66,32 @@ def _sub_id(subscription_id: Optional[str] = None) -> str:
     return sid
 
 
+# ─── Validation ───────────────────────────────────────────────────────────────
+
+def verify_azure_credentials(
+    subscription_id: str,
+    tenant_id: str,
+    client_id: str,
+    client_secret: str,
+) -> bool:
+    """
+    Validate Azure credentials by attempting to get an access token
+    and potentially listing a resource.
+    """
+    try:
+        credential = ClientSecretCredential(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+        # Try to get a token for Azure Management API
+        token = credential.get_token("https://management.azure.com/.default")
+        return True if token else False
+    except Exception as e:
+        logger.error("Azure credential validation failed: %s", e)
+        return False
+
+
 # ─── Cost Management ──────────────────────────────────────────────────────────
 
 def fetch_azure_costs(
