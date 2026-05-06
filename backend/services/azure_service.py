@@ -10,9 +10,7 @@ import os
 
 
 
-print("TENANT:", os.getenv("AZURE_TENANT_ID"))
-print("CLIENT:", os.getenv("AZURE_CLIENT_ID"))
-print("SECRET:", os.getenv("AZURE_CLIENT_SECRET"))
+
 
 
 

@@ -4,44 +4,158 @@ from services.azure_service import get_running_vms
 from models.cloud_account import CloudAccount
 from sqlalchemy.orm import Session
 
+import re
+import time
+from collections import defaultdict
+from html import escape
 
-# ─── Main function ──────────────────────────────
-def get_ai_response(user_message: str, user_id: int, db: Session):
 
-    user_message = user_message.lower()
+# ─────────────────────────────────────────────
+# 🔐 RATE LIMITING
+# ─────────────────────────────────────────────
+REQUEST_LOG = defaultdict(list)
+RATE_LIMIT = 10
+RATE_WINDOW = 60
 
-    # ─── Detect user intent ───
+
+# ─────────────────────────────────────────────
+# 🔐 BLOCKED PATTERNS
+# ─────────────────────────────────────────────
+BLOCKED_PATTERNS = [
+    "ignore previous instructions",
+    "ignore all instructions",
+    "reveal secrets",
+    "show secrets",
+    "give credentials",
+    "access tokens",
+    "delete database",
+    "drop table",
+    "execute command",
+    "run script",
+    "shutdown server",
+    "bypass security",
+    "hack",
+    "inject",
+    "sudo",
+    "rm -rf",
+    "system prompt",
+    "developer prompt",
+]
+
+
+# ─────────────────────────────────────────────
+# 🔐 RATE LIMIT CHECK
+# ─────────────────────────────────────────────
+def check_rate_limit(user_id: int):
+
+    current_time = time.time()
+
+    REQUEST_LOG[user_id] = [
+        t for t in REQUEST_LOG[user_id]
+        if current_time - t < RATE_WINDOW
+    ]
+
+    if len(REQUEST_LOG[user_id]) >= RATE_LIMIT:
+        raise ValueError("Too many requests. Please try again later.")
+
+    REQUEST_LOG[user_id].append(current_time)
+
+
+# ─────────────────────────────────────────────
+# 🔐 INPUT SANITIZATION
+# ─────────────────────────────────────────────
+def sanitize_user_input(user_message: str) -> str:
+
+    if not user_message:
+        raise ValueError("Message cannot be empty")
+
+    user_message = user_message.strip()
+
+    if len(user_message) > 300:
+        raise ValueError("Message too long")
+
+    user_message = escape(user_message)
+
+    user_message = re.sub(r"[<>;$`|{}]", "", user_message)
+
+    lower_msg = user_message.lower()
+
+    for pattern in BLOCKED_PATTERNS:
+        if pattern in lower_msg:
+            raise ValueError("Suspicious request detected")
+
+    return lower_msg
+
+
+# ─────────────────────────────────────────────
+# 🔐 SAFE RESPONSE CLEANER
+# ─────────────────────────────────────────────
+def safe_response(text: str) -> str:
+
+    text = text.replace("access_key", "[PROTECTED]")
+    text = text.replace("secret_key", "[PROTECTED]")
+    text = text.replace("client_secret", "[PROTECTED]")
+
+    return text
+
+
+# ─────────────────────────────────────────────
+# 🤖 MAIN CHATBOT FUNCTION
+# ─────────────────────────────────────────────
+def get_ai_response(
+    user_message: str,
+    user_id: int,
+    db: Session,
+):
+
+    # 🔐 Rate limiting
+    check_rate_limit(user_id)
+
+    # 🔐 Sanitize input
+    user_message = sanitize_user_input(user_message)
+
+    # ☁️ Provider detection
     show_aws = "aws" in user_message
     show_azure = "azure" in user_message
 
-    # default → show both
     if not show_aws and not show_azure:
         show_aws = True
         show_azure = True
 
-    # 🔥 FETCH USER ACCOUNTS FROM DB
+    # 🔥 Fetch accounts
     accounts = db.query(CloudAccount).filter(
         CloudAccount.user_id == user_id
     ).all()
 
-    aws_account = next((a for a in accounts if a.provider == "aws"), None)
-    azure_account = next((a for a in accounts if a.provider == "azure"), None)
+    aws_account = next(
+        (a for a in accounts if a.provider == "aws"),
+        None,
+    )
 
-    # ─── Fetch AWS data ───
+    azure_account = next(
+        (a for a in accounts if a.provider == "azure"),
+        None,
+    )
+
+    # ☁️ AWS resources
     aws_instances = []
+
     if show_aws and aws_account:
         try:
             aws_instances = get_running_instances(
                 aws_account.access_key,
                 aws_account.secret_key,
-                aws_account.default_region or "us-east-1"
+                aws_account.default_region or "us-east-1",
             )
+
         except Exception:
             aws_instances = []
 
-    # ─── Fetch Azure data ───
+    # ☁️ Azure resources
     azure_vms = []
+
     if show_azure and azure_account:
+
         try:
             extra = azure_account.extra_config or {}
 
@@ -51,64 +165,83 @@ def get_ai_response(user_message: str, user_id: int, db: Session):
                 client_id=extra.get("client_id"),
                 client_secret=extra.get("client_secret"),
             )
+
         except Exception:
             azure_vms = []
 
-    total_resources = len(aws_instances) + len(azure_vms)
-
-    # ─── Insights ───
+    # 📊 Insights
     insights = []
 
     for inst in aws_instances:
-        insights.append(f"AWS EC2 instance {inst} is running")
+        insights.append(
+            safe_response(
+                f"AWS EC2 instance {inst} is running"
+            )
+        )
 
     for vm in azure_vms:
-        insights.append(f"Azure VM {vm} is running")
+        insights.append(
+            safe_response(
+                f"Azure VM {vm} is running"
+            )
+        )
 
-    # ─── Actions ───
+    total_resources = len(aws_instances) + len(azure_vms)
+
+    # ⚠️ Safe suggestions only
     actions = []
 
     for inst in aws_instances:
         actions.append({
-            "label": f"Stop AWS Instance {inst}",
-            "type": "stop",
+            "label": f"Suggest stopping AWS instance {inst}",
+            "type": "suggestion",
             "provider": "aws",
             "resource_id": inst,
-            "user_id": user_id   # 🔥 IMPORTANT
         })
 
     for vm in azure_vms:
         actions.append({
-            "label": f"Stop Azure VM {vm}",
-            "type": "stop",
+            "label": f"Suggest stopping Azure VM {vm}",
+            "type": "suggestion",
             "provider": "azure",
             "resource_id": vm,
-            "user_id": user_id   # 🔥 IMPORTANT
         })
 
-    # ─── Savings ───
+    # 💰 Savings estimate
     monthly = total_resources * 500
     yearly = monthly * 12
 
-    # ─── Provider message ───
+    # ☁️ Provider message
     if show_aws and show_azure:
         provider_msg = "AWS and Azure"
+
     elif show_aws:
         provider_msg = "AWS"
+
     else:
         provider_msg = "Azure"
 
-    # ─── Final response ───
+    # ✅ Final response
     return {
-        "message": f"You have {total_resources} running resources in {provider_msg}.",
+
+        "message": safe_response(
+            f"You have {total_resources} running resources "
+            f"in {provider_msg}."
+        ),
+
         "insights": insights,
+
         "actions": actions,
+
         "savings": {
             "monthly": f"₹{monthly}",
-            "yearly": f"₹{yearly}"
+            "yearly": f"₹{yearly}",
         },
+
         "finance_advice": [
-            "Reduce unused resources to save cost",
-            "Invest saved money in smart financial plans"
-        ]
+            "Reduce unused resources to save costs",
+            "Use auto-scaling for efficient cloud usage",
+            "Enable monitoring for suspicious activity",
+            "Invest saved money into smart financial plans",
+        ],
     }

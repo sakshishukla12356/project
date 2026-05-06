@@ -18,15 +18,14 @@ from config.settings import get_settings
 from database.base import init_db
 from routers import auth, aws, azure, gcp, carbon, dashboard
 
-HEAD
 
-=======
+
+
 from routers import chatbot   # ✅ NEW (AI chatbot import)
 from routers import cloud_actions
 from routers import cloud_account
-0a187d5 (🔥 Added chatbot + cloud actions + DB integration)
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
+
 
 structlog.configure(
     processors=[
@@ -47,7 +46,7 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-# ─── Lifespan ─────────────────────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,7 +57,7 @@ async def lifespan(app: FastAPI):
     logger.info("shutdown", message="Goodbye.")
 
 
-# ─── App ─────────────────────────────────────────────────────────────────────
+
 
 app = FastAPI(
     title="Multi-Cloud Dashboard API",
@@ -72,7 +71,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─── CORS ────────────────────────────────────────────────────────────────────
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -83,7 +82,6 @@ app.add_middleware(
 )
 
 
-# ─── Global exception handler ────────────────────────────────────────────────
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -94,7 +92,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ─── Routers ─────────────────────────────────────────────────────────────────
+
 
 app.include_router(auth.router)
 app.include_router(aws.router)
@@ -102,7 +100,7 @@ app.include_router(azure.router)
 app.include_router(gcp.router)
 app.include_router(carbon.router)
 app.include_router(dashboard.router)
-app.include_router(azure_router, prefix="/api")
+
 
 # ✅ NEW: AI Chatbot router (non-breaking addition)
 app.include_router(chatbot.router, prefix="/ai", tags=["AI Chatbot"])
@@ -110,7 +108,7 @@ app.include_router(cloud_actions.router, prefix="/cloud", tags=["Cloud Actions"]
 app.include_router(cloud_account.router, prefix="/cloud-account", tags=["Cloud Account"])
 
 
-# ─── Health check ────────────────────────────────────────────────────────────
+
 
 @app.get("/health", tags=["Health"])
 async def health():
