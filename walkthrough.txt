@@ -1,0 +1,181 @@
+# Security Hardening Walkthrough — Secrets & Rate Limiting
+
+## What Was Done
+
+### 1. Secrets Removed from `.env` ✅
+
+> [!CAUTION]
+> Real Azure credentials (tenant ID, client ID, **client secret**, subscription ID) were previously stored in plaintext in `backend/.env`. These have been wiped.
+
+#### Changes Made
+
+| File | Action | Why |
+|------|--------|-----|
+| [.env](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/.env) | **Sanitized** — all real credentials replaced with empty values | Prevents accidental commits of live secrets |
+| [.env.example](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/.env.example) | **NEW** — safe template with instructions | Developers copy this to `.env` and fill in locally |
+| [settings.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/config/settings.py) | **Hardened** — startup validator blocks insecure `SECRET_KEY` in production | Can't deploy with default `"change-me"` |
+| [azure_service.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/services/azure_service.py) | **Fixed** — removed `print()` calls that leaked Azure secrets to stdout | This was the single biggest leak |
+| [azure_auth.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/azure_ext/azure_auth.py) | **Refactored** — uses centralized `Settings` instead of raw `os.getenv()` | Single source of truth for config |
+| [azure_services.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/azure_ext/azure_services.py) | **Refactored** — uses centralized `Settings` instead of raw `os.getenv()` | Same as above |
+| [.dockerignore](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/.dockerignore) | **NEW** — excludes `.env` from Docker builds | Prevents secrets baked into image layers |
+| [main.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/main.py) | **Fixed** — resolved git merge conflict markers, cleaned up imports | File had broken syntax from unresolved merge |
+
+#### How Secrets Flow Now
+
+```mermaid
+flowchart LR
+    A[".env.example<br/>(committed, empty)"] -->|developer copies| B[".env<br/>(local only, gitignored)"]
+    B -->|read by| C["Pydantic Settings"]
+    C -->|validated at startup| D["Application Code"]
+    E["Environment Variables<br/>(production)"] -->|override .env| C
+
+    style B fill:#ff6b6b,color:#fff
+    style E fill:#51cf66,color:#fff
+```
+
+---
+
+### 2. Rate Limiting Added ✅
+
+#### New File: [rate_limit.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/middleware/rate_limit.py)
+
+Sliding-window counter with tiered rate limits per route category:
+
+| Tier | Routes | Limit | Ban Policy |
+|------|--------|-------|------------|
+| **AUTH** | `/auth/login`, `/auth/signup`, `/auth/reset` | 5 req / 60s | Auto-ban after 10 consecutive 429s (10 min) |
+| **AI** | `/ai/*` (chatbot) | 10 req / 60s | Auto-ban after 30 consecutive 429s (5 min) |
+| **CLOUD_WRITE** | `/cloud/stop`, `/cloud/start` | 10 req / 60s | No auto-ban |
+| **PUBLIC** | All other routes | 60 req / 60s | No auto-ban |
+| **HEALTH** | `/health`, `/` | 120 req / 60s | No auto-ban |
+
+#### How It Works
+
+```mermaid
+flowchart TD
+    A["Incoming Request"] --> B["Extract Client IP<br/>(X-Forwarded-For or direct)"]
+    B --> C["Match Path → Tier"]
+    C --> D{"IP Banned?"}
+    D -->|Yes| E["429 + Retry-After header"]
+    D -->|No| F{"Within Window Limit?"}
+    F -->|No| G["Increment 429 counter"]
+    G --> H{"Exceeded ban_after?"}
+    H -->|Yes| I["Temp-ban IP"]
+    H -->|No| E
+    F -->|Yes| J["✅ Allow + set rate-limit headers"]
+
+    style E fill:#ff6b6b,color:#fff
+    style I fill:#ff6b6b,color:#fff
+    style J fill:#51cf66,color:#fff
+```
+
+#### Integration Points
+
+- **Global middleware** in [main.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/main.py#L84-L86) — catches every request
+- **Per-route dependency** on [auth.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/routers/auth.py) (login + signup) — defense in depth
+- **Per-route dependency** on [chatbot.py](file:///c:/Users/Sanskruti%20Ingle/Desktop/CloudCost/project/backend/routers/chatbot.py) — protects expensive AI calls
+
+#### Response on Rate Limit (429)
+
+```json
+{
+  "detail": {
+    "error": "Too many requests. Please slow down.",
+    "tier": "auth",
+    "retry_after": 47,
+    "banned": false
+  }
+}
+```
+
+Headers returned:
+```
+Retry-After: 47
+X-RateLimit-Limit: 5
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1714924800
+```
+
+---
+
+### 3. Testing
+
+#### Test Rate Limiting with cURL
+
+```bash
+# Rapid-fire login attempts (should get 429 after 5th)
+for i in $(seq 1 8); do
+  echo "--- Request $i ---"
+  curl -s -o /dev/null -w "HTTP %{http_code}\n" \
+    -X POST http://localhost:8000/auth/login \
+    -d "username=test@test.com&password=wrong"
+done
+```
+
+```bash
+# Check rate-limit headers on any endpoint
+curl -v http://localhost:8000/health 2>&1 | grep -i "x-ratelimit"
+```
+
+#### Test with Postman
+
+1. Set up a **Collection Runner** targeting `POST /auth/login`
+2. Set iterations to **10** with **0ms delay**
+3. Observe: first 5 return `200`/`401`, remaining return `429`
+4. Check `Retry-After` header in the 429 responses
+
+---
+
+## Best Practices Summary
+
+### Secrets Management
+
+| Practice | Status |
+|----------|--------|
+| `.env` in `.gitignore` | ✅ Already was |
+| `.env.example` committed (no real values) | ✅ Added |
+| No `os.getenv()` scattered in code | ✅ Fixed — all through Settings |
+| No `print()` of secrets | ✅ Fixed — removed debug prints |
+| Startup validation for SECRET_KEY | ✅ Added |
+| `.dockerignore` excludes `.env` | ✅ Added |
+| Real credentials rotated | ⚠️ **YOU MUST DO THIS** (see below) |
+
+### Deployment Recommendations
+
+| Platform | How to Set Secrets |
+|----------|--------------------|
+| **Vercel** | Dashboard → Project → Settings → Environment Variables |
+| **Render** | Dashboard → Service → Environment → Secret Files or Env Groups |
+| **Railway** | Dashboard → Project → Variables (supports `.env` file upload) |
+| **Docker** | `docker run --env-file .env` or `docker-compose.yml` with `env_file:` |
+| **AWS ECS/EKS** | AWS Secrets Manager + task definition `secrets` block |
+| **Azure** | Azure Key Vault + managed identity |
+
+---
+
+> [!IMPORTANT]
+> ## Action Required: Rotate Your Azure Credentials
+> 
+> The following credentials were exposed in plaintext in the old `.env`:
+> - `AZURE_TENANT_ID=238064e9-...`
+> - `AZURE_CLIENT_ID=6e624e7b-...`
+> - `AZURE_CLIENT_SECRET=Hcx8Q~j5SC7A41ZY...`
+> - `AZURE_SUBSCRIPTION_ID=c054267a-...`
+> 
+> **Even though `.env` was gitignored and never committed**, the client secret should be rotated in the Azure Portal:
+> 1. Go to **Azure Portal → App Registrations → Your App → Certificates & Secrets**
+> 2. Delete the old secret
+> 3. Create a new one
+> 4. Update your local `.env` with the new value
+
+---
+
+## Files Changed Summary
+
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/config/settings.py)
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/services/azure_service.py)
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/azure_ext/azure_auth.py)
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/azure_ext/azure_services.py)
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/main.py)
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/routers/auth.py)
+render_diffs(file:///c:/Users/Sanskruti Ingle/Desktop/CloudCost/project/backend/routers/chatbot.py)

@@ -7,10 +7,15 @@ Handles user authentication:
 Returns JWT tokens for secure API access.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
+
+from middleware.rate_limit import RateLimiter, Tier
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from config.settings import get_settings
+
+settings = get_settings()
 
 from database.base import get_db
 from controllers import auth_controller
@@ -44,9 +49,11 @@ class TokenResponse(BaseModel):
     "/signup",
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimiter(Tier.AUTH))],
 )
 async def signup(
     body: SignupRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -66,6 +73,16 @@ async def signup(
                 detail="Signup failed",
             )
 
+        # Set secure cookie
+        response.set_cookie(
+            key="access_token",
+            value=f"Bearer {result['access_token']}",
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
+            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+
         return result
 
     except HTTPException:
@@ -84,8 +101,10 @@ async def signup(
 @router.post(
     "/login",
     response_model=TokenResponse,
+    dependencies=[Depends(RateLimiter(Tier.AUTH))],
 )
 async def login(
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
@@ -107,6 +126,16 @@ async def login(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Set secure cookie
+        response.set_cookie(
+            key="access_token",
+            value=f"Bearer {result['access_token']}",
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
+            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        )
+
         return result
 
     except HTTPException:
@@ -118,3 +147,20 @@ async def login(
             detail=f"Login error: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+# ─────────────────────────────────────────────
+# 🚪 LOGOUT
+# ─────────────────────────────────────────────
+@router.post("/logout")
+async def logout(response: Response):
+    """
+    Clear the HttpOnly authentication cookie.
+    """
+    response.delete_cookie(
+        key="access_token",
+        secure=settings.COOKIE_SECURE,
+        httponly=True,
+        samesite="lax",
+    )
+    return {"detail": "Logged out successfully"}

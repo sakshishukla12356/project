@@ -12,19 +12,19 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import JSONResponse
 
 from config.settings import get_settings
 from database.base import init_db
 from routers import auth, aws, azure, gcp, carbon, dashboard
-
-HEAD
-
-=======
-from routers import chatbot   # ✅ NEW (AI chatbot import)
+from routers import chatbot
 from routers import cloud_actions
 from routers import cloud_account
-0a187d5 (🔥 Added chatbot + cloud actions + DB integration)
+from routers import security
+from middleware.rate_limit import RateLimitMiddleware
+from middleware.security_monitor import SecurityMonitorMiddleware
 
 # ─── Logging ─────────────────────────────────────────────────────────────────
 
@@ -72,15 +72,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ─── CORS ────────────────────────────────────────────────────────────────────
+# ─── Transport Security & CORS ───────────────────────────────────────────────
+
+if settings.REQUIRE_HTTPS:
+    app.add_middleware(HTTPSRedirectMiddleware)
+
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=[h.strip() for h in settings.ALLOWED_HOSTS.split(",")]
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.APP_ENV == "development" else [],
+    allow_origins=[settings.FRONTEND_URL] if settings.APP_ENV != "development" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Security & Rate Limiting ────────────────────────────────────────────────
+
+app.add_middleware(SecurityMonitorMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 
 # ─── Global exception handler ────────────────────────────────────────────────
@@ -102,12 +115,12 @@ app.include_router(azure.router)
 app.include_router(gcp.router)
 app.include_router(carbon.router)
 app.include_router(dashboard.router)
-app.include_router(azure_router, prefix="/api")
 
-# ✅ NEW: AI Chatbot router (non-breaking addition)
+# AI Chatbot router
 app.include_router(chatbot.router, prefix="/ai", tags=["AI Chatbot"])
 app.include_router(cloud_actions.router, prefix="/cloud", tags=["Cloud Actions"])
 app.include_router(cloud_account.router, prefix="/cloud-account", tags=["Cloud Account"])
+app.include_router(security.router, prefix="/security", tags=["Security Dashboard"])
 
 
 # ─── Health check ────────────────────────────────────────────────────────────
@@ -124,5 +137,6 @@ async def root():
         "docs": "/docs",
         "redoc": "/redoc",
         "health": "/health",
-        "ai_chat": "/ai/chat"
+        "ai_chat": "/ai/chat",
     }
+
