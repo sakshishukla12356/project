@@ -19,14 +19,15 @@ from fastapi.responses import JSONResponse
 from config.settings import get_settings
 from database.base import init_db
 from routers import auth, aws, azure, gcp, carbon, dashboard
-from routers import chatbot
+
+
+
+
+from routers import chatbot   # ✅ NEW (AI chatbot import)
 from routers import cloud_actions
 from routers import cloud_account
-from routers import security
-from middleware.rate_limit import RateLimitMiddleware
-from middleware.security_monitor import SecurityMonitorMiddleware
 
-# ─── Logging ─────────────────────────────────────────────────────────────────
+
 
 structlog.configure(
     processors=[
@@ -47,7 +48,7 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-# ─── Lifespan ─────────────────────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,7 +59,7 @@ async def lifespan(app: FastAPI):
     logger.info("shutdown", message="Goodbye.")
 
 
-# ─── App ─────────────────────────────────────────────────────────────────────
+
 
 app = FastAPI(
     title="Multi-Cloud Dashboard API",
@@ -82,6 +83,7 @@ app.add_middleware(
     allowed_hosts=[h.strip() for h in settings.ALLOWED_HOSTS.split(",")]
 )
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.FRONTEND_URL] if settings.APP_ENV != "development" else ["*"],
@@ -96,7 +98,6 @@ app.add_middleware(SecurityMonitorMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
 
-# ─── Global exception handler ────────────────────────────────────────────────
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -107,7 +108,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# ─── Routers ─────────────────────────────────────────────────────────────────
+
 
 app.include_router(auth.router)
 app.include_router(aws.router)
@@ -123,7 +124,7 @@ app.include_router(cloud_account.router, prefix="/cloud-account", tags=["Cloud A
 app.include_router(security.router, prefix="/security", tags=["Security Dashboard"])
 
 
-# ─── Health check ────────────────────────────────────────────────────────────
+
 
 @app.get("/health", tags=["Health"])
 async def health():

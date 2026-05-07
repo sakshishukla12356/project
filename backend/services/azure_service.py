@@ -6,6 +6,17 @@ Fetches VM usage, storage accounts, and cost management data.
 """
 from __future__ import annotations
 
+<<<<<<< HEAD
+=======
+import os
+
+
+
+
+
+
+
+>>>>>>> 8d46b5d8900a7173bc7df5d73464820da1297500
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
