@@ -48,8 +48,12 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("startup", message="Initialising database …")
-    await init_db()
-    logger.info("startup", message="Database ready.")
+    try:
+        await init_db()
+        logger.info("startup", message="Database ready.")
+    except Exception as exc:
+        # Do not prevent the web server from starting; log loudly for ops.
+        logger.error("startup_db_failed", error=str(exc), exc_info=exc)
     yield
     logger.info("shutdown", message="Goodbye.")
 
@@ -73,10 +77,12 @@ app = FastAPI(
 if settings.REQUIRE_HTTPS:
     app.add_middleware(HTTPSRedirectMiddleware)
 
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=[h.strip() for h in settings.ALLOWED_HOSTS.split(",")]
-)
+allowed_hosts_raw = (settings.ALLOWED_HOSTS or "").strip()
+if allowed_hosts_raw and allowed_hosts_raw != "*":
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=[h.strip() for h in allowed_hosts_raw.split(",") if h.strip()],
+    )
 
 
 app.add_middleware(
@@ -144,4 +150,5 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.environ.get("PORT", 10000))
+    logger.info("startup", message="Starting Uvicorn", host="0.0.0.0", port=port)
     uvicorn.run("main:app", host="0.0.0.0", port=port)
