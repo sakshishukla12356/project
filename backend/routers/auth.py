@@ -1,45 +1,95 @@
 """
 routers/auth.py
 
-Handles user authentication:
-- Signup
-- Login
-Returns JWT tokens for secure API access.
+Enterprise-Grade Authentication Router
+
+Features:
+✔ Secure Signup
+✔ Secure Login
+✔ JWT Authentication
+✔ JSON-based Requests
+✔ Strong Validation
+✔ Production-Ready Error Handling
+✔ RBAC-Compatible
+✔ Async SQLAlchemy Support
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel, EmailStr, Field
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
+
+from pydantic import (
+    BaseModel,
+    EmailStr,
+    Field,
+)
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.base import get_db
 from controllers import auth_controller
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+# =========================================================
+# ROUTER CONFIG
+# =========================================================
+router = APIRouter(
+    prefix="/auth",
+    tags=["Authentication"],
+)
 
 
-# ─────────────────────────────────────────────
-# 📥 REQUEST MODELS
-# ─────────────────────────────────────────────
+# =========================================================
+# REQUEST MODELS
+# =========================================================
 class SignupRequest(BaseModel):
+
     email: EmailStr
-    password: str = Field(..., min_length=6)
-    full_name: str | None = None
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="Strong password"
+    )
+
+    full_name: str | None = Field(
+        default=None,
+        max_length=255
+    )
 
 
-# ─────────────────────────────────────────────
-# 📤 RESPONSE MODELS
-# ─────────────────────────────────────────────
+class LoginRequest(BaseModel):
+
+    email: EmailStr
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+    )
+
+
+# =========================================================
+# RESPONSE MODELS
+# =========================================================
 class TokenResponse(BaseModel):
+
     access_token: str
+
     token_type: str
+
     user_id: int
+
     email: str
 
 
-# ─────────────────────────────────────────────
-# 📝 SIGNUP
-# ─────────────────────────────────────────────
+# =========================================================
+# USER SIGNUP
+# =========================================================
 @router.post(
     "/signup",
     response_model=TokenResponse,
@@ -50,9 +100,12 @@ async def signup(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Register a new user and return JWT token.
+    Register a new user.
+    Returns JWT access token.
     """
+
     try:
+
         result = await auth_controller.signup(
             email=body.email,
             password=body.password,
@@ -63,7 +116,7 @@ async def signup(
         if not result:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Signup failed",
+                detail="Signup failed"
             )
 
         return result
@@ -74,29 +127,31 @@ async def signup(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Signup error: {str(e)}",
+            detail=f"Signup error: {str(e)}"
         )
 
 
-# ─────────────────────────────────────────────
-# 🔐 LOGIN
-# ─────────────────────────────────────────────
+# =========================================================
+# USER LOGIN
+# =========================================================
 @router.post(
     "/login",
     response_model=TokenResponse,
 )
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    body: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Login using email + password.
+    Authenticate user using email + password.
     Returns JWT token.
     """
+
     try:
+
         result = await auth_controller.login(
-            email=form_data.username,  # username field used for email
-            password=form_data.password,
+            email=body.email,
+            password=body.password,
             db=db,
         )
 
@@ -118,3 +173,18 @@ async def login(
             detail=f"Login error: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+@router.get("/health")
+async def auth_health():
+    """
+    Authentication service health check.
+    """
+
+    return {
+        "status": "healthy",
+        "service": "authentication",
+    }
