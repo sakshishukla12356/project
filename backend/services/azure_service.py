@@ -155,6 +155,51 @@ def fetch_azure_costs(
     }
 
 
+def fetch_azure_cost_trend(
+    subscription_id: Optional[str] = None,
+    days: int = 7,
+    **cred_kwargs,
+) -> list[dict]:
+    """
+    Fetch daily Azure cost trend for the last `days` complete days.
+    """
+    credential = _get_credential(**cred_kwargs)
+    sub = _sub_id(subscription_id)
+    client = CostManagementClient(credential)
+    scope = f"/subscriptions/{sub}"
+
+    end_date = datetime.now(timezone.utc).date().isoformat()
+    start_date = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
+
+    query = QueryDefinition(
+        type="ActualCost",
+        timeframe=TimeframeType.CUSTOM,
+        time_period=QueryTimePeriod(
+            from_property=datetime.fromisoformat(start_date),
+            to=datetime.fromisoformat(end_date),
+        ),
+        dataset=QueryDataset(
+            granularity="Daily",
+            aggregation={"totalCost": QueryAggregation(name="PreTaxCost", function="Sum")},
+        ),
+    )
+
+    try:
+        result = client.query.usage(scope=scope, parameters=query)
+        trend: list[dict] = []
+        if result.rows:
+            cols = [c.name for c in result.columns]
+            cost_idx = next((i for i, c in enumerate(cols) if "Cost" in c or "cost" in c), 0)
+            date_idx = next((i for i, c in enumerate(cols) if "Date" in c or "date" in c), 1)
+            for row in result.rows:
+                raw_date = str(row[date_idx])
+                day_label = raw_date[-2:]
+                trend.append({"date": day_label, "cost": round(float(row[cost_idx]), 4)})
+        return trend if trend else [{"date": str(i + 1), "cost": 0.0} for i in range(days)]
+    except Exception:
+        return [{"date": str(i + 1), "cost": 0.0} for i in range(days)]
+
+
 # ─── Virtual Machines ─────────────────────────────────────────────────────────
 
 # Azure VM size → approximate kWh/hour (from Azure sustainability docs)

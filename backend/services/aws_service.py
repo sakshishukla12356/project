@@ -1,12 +1,18 @@
 """
 services/aws_service.py
 
-FAST Multi-Region + Multi-Service AWS Fetcher
-Optimized + Correct + Production Ready
+AWS telemetry fetcher:
+- Live resource inventory (EC2, RDS, S3, Lambda)
+- Live Cost Explorer totals and trends
 """
 
-import boto3
+from __future__ import annotations
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
+import boto3
 
 # 🔹 LIMIT REGIONS (performance control)
 MAX_REGIONS = 10
@@ -96,6 +102,29 @@ def fetch_rds(region, access_key, secret_key):
     return data
 
 
+def fetch_lambda(region, access_key, secret_key):
+    data = []
+    try:
+        client = boto3.client(
+            "lambda",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+        )
+        paginator = client.get_paginator("list_functions")
+        for page in paginator.paginate():
+            for fn in page.get("Functions", []):
+                data.append({
+                    "service": "Lambda",
+                    "id": fn.get("FunctionName"),
+                    "state": "active",
+                    "region": region,
+                })
+    except Exception:
+        pass
+    return data
+
+
 # ─────────────────────────────────────────────
 # 🔹 SINGLE REGION SCAN
 # ─────────────────────────────────────────────
@@ -104,6 +133,7 @@ def scan_region(region, access_key, secret_key):
 
     results.extend(fetch_ec2(region, access_key, secret_key))
     results.extend(fetch_rds(region, access_key, secret_key))
+    results.extend(fetch_lambda(region, access_key, secret_key))
 
     return results
 
@@ -163,25 +193,124 @@ def fetch_aws_all(access_key, secret_key, region):
 
 
 # ─────────────────────────────────────────────
-# 🔹 SUMMARY (DASHBOARD)
+# 🔹 COST EXPLORER HELPERS
 # ─────────────────────────────────────────────
+def _normalize_ce_amount(value: Any) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
 def fetch_aws_costs(access_key, secret_key, region):
-    data = fetch_aws_all(access_key, secret_key, region)
+    """
+    Live AWS costs from Cost Explorer (last 30 complete days).
+    Falls back to zeroed payload if CE is unavailable.
+    """
+    today = datetime.now(timezone.utc).date()
+    start = (today - timedelta(days=30)).isoformat()
+    end = today.isoformat()
 
-    service_count = {}
+    try:
+        ce = boto3.client(
+            "ce",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name="us-east-1",  # Cost Explorer is in us-east-1
+        )
+        result = ce.get_cost_and_usage(
+            TimePeriod={"Start": start, "End": end},
+            Granularity="MONTHLY",
+            Metrics=["UnblendedCost"],
+            GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+        )
+        groups = (result.get("ResultsByTime") or [{}])[0].get("Groups", [])
+        by_service = []
+        total = 0.0
+        for grp in groups:
+            amount = _normalize_ce_amount(
+                grp.get("Metrics", {}).get("UnblendedCost", {}).get("Amount", 0)
+            )
+            service_name = (grp.get("Keys") or ["Unknown"])[0]
+            total += amount
+            by_service.append({"service": service_name, "cost_usd": round(amount, 4)})
 
-    for r in data.get("resources", []):
-        service = r["service"]
-        service_count[service] = service_count.get(service, 0) + 1
+        by_service.sort(key=lambda x: x.get("cost_usd", 0), reverse=True)
+        return {
+            "start": start,
+            "end": end,
+            "total_cost_usd": round(total, 4),
+            "total_services": len(by_service),
+            "by_service": by_service,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "start": start,
+            "end": end,
+            "total_cost_usd": 0.0,
+            "total_services": 0,
+            "by_service": [],
+        }
 
-    return {
-        "total_cost_usd": 0,
-        "total_services": len(service_count),
-        "by_service": [
-            {"service": k, "count": v}
-            for k, v in service_count.items()
-        ],
-    }
+
+def fetch_aws_cost_trend(access_key, secret_key, days: int = 7):
+    """
+    Daily AWS cost trend for the last `days` complete days.
+    """
+    today = datetime.now(timezone.utc).date()
+    start = (today - timedelta(days=days)).isoformat()
+    end = today.isoformat()
+
+    try:
+        ce = boto3.client(
+            "ce",
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name="us-east-1",
+        )
+        result = ce.get_cost_and_usage(
+            TimePeriod={"Start": start, "End": end},
+            Granularity="DAILY",
+            Metrics=["UnblendedCost"],
+        )
+        trend = []
+        for row in result.get("ResultsByTime", []):
+            amount = _normalize_ce_amount(
+                row.get("Total", {}).get("UnblendedCost", {}).get("Amount", 0)
+            )
+            day = row.get("TimePeriod", {}).get("Start", "")
+            label = day[-2:] if day else ""
+            trend.append({"date": label, "cost": round(amount, 4)})
+        return trend
+    except Exception:
+        return [{"date": str(i + 1), "cost": 0.0} for i in range(days)]
+
+
+def summarize_aws_resources(resources: list[dict]) -> dict[str, int]:
+    """
+    Aggregate AWS resource counts for dashboard charts/cards.
+    """
+    summary = {"ec2": 0, "rds": 0, "s3": 0, "lambda": 0, "other": 0, "active_resources": 0}
+    for r in resources:
+        service = (r.get("service") or "").lower()
+        state = (r.get("state") or "").lower()
+        is_active = state in {"running", "active", "available"} or service == "s3"
+        if is_active:
+            summary["active_resources"] += 1
+
+        if service == "ec2":
+            summary["ec2"] += 1
+        elif service == "rds":
+            summary["rds"] += 1
+        elif service == "s3":
+            summary["s3"] += 1
+        elif service == "lambda":
+            summary["lambda"] += 1
+        else:
+            summary["other"] += 1
+
+    return summary
 
 
 # ─────────────────────────────────────────────

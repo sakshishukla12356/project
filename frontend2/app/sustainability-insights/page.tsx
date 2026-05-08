@@ -31,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
+import { telemetryApi } from "@/src/services/api"
 
 type SustainabilityMetrics = {
   energy_efficiency: number
@@ -104,22 +105,39 @@ const howItWorks = [
 export default function SustainabilityInsightsPage() {
   const [metrics, setMetrics] = useState<SustainabilityMetrics>(initialMetrics)
   const [isLoading, setIsLoading] = useState(true)
-  const [isBackendConnected] = useState(false)
+  const [isBackendConnected, setIsBackendConnected] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false)
-    }, 1200)
-    return () => clearTimeout(timer)
-  }, [])
-
-  useEffect(() => {
-    // API-ready architecture:
-    // Replace with backend call and update centralized metrics state.
-    if (!isBackendConnected) {
+  const loadMetrics = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const [aws, azure] = await Promise.all([
+        telemetryApi.getAwsSustainability(),
+        telemetryApi.getAzureSustainability(),
+      ])
+      setMetrics({
+        energy_efficiency: Math.round(((aws.energy_efficiency || 0) + (azure.energy_efficiency || 0)) / 2),
+        water_impact: (aws.water_impact || 0) + (azure.water_impact || 0),
+        renewable_coverage: Math.round(((aws.renewable_coverage || 0) + (azure.renewable_coverage || 0)) / 2),
+        co2_emissions: (aws.co2_emissions || 0) + (azure.co2_emissions || 0),
+        sustainability_score: Math.round(((aws.sustainability_score || 0) + (azure.sustainability_score || 0)) / 2),
+        trees_planted: (aws.trees_planted || 0) + (azure.trees_planted || 0),
+        energy_consumed: (aws.energy_consumed || 0) + (azure.energy_consumed || 0),
+      })
+      setIsBackendConnected(true)
+    } catch (e) {
       setMetrics(initialMetrics)
+      setIsBackendConnected(false)
+      setError(e instanceof Error ? e.message : "Unable to fetch cloud telemetry")
+    } finally {
+      setIsLoading(false)
     }
-  }, [isBackendConnected])
+  }
+
+  useEffect(() => {
+    void loadMetrics()
+  }, [])
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -174,9 +192,9 @@ export default function SustainabilityInsightsPage() {
                     ) : (
                       <p className="text-3xl font-bold text-foreground">{metrics.energy_efficiency}%</p>
                     )}
-                    <p className="text-xs text-muted-foreground">{isLoading ? "Waiting for cloud telemetry..." : "No Data"}</p>
+                    <p className="text-xs text-muted-foreground">{isLoading ? "Waiting for cloud telemetry..." : "Live telemetry"}</p>
                   </div>
-                  <span className="text-xs text-neon-green">0%</span>
+                  <span className="text-xs text-neon-green">{metrics.energy_efficiency}%</span>
                 </div>
                 <div className="h-[56px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
@@ -212,11 +230,11 @@ export default function SustainabilityInsightsPage() {
                     {isLoading ? (
                       <Skeleton className="h-8 w-16" />
                     ) : (
-                      <p className="text-3xl font-bold text-foreground">No Data</p>
+                      <p className="text-3xl font-bold text-foreground">{metrics.water_impact} L</p>
                     )}
                     <p className="text-xs text-primary">Estimated Usage: {metrics.water_impact} L</p>
                   </div>
-                  <span className="text-xs text-neon-green">0%</span>
+                  <span className="text-xs text-neon-green">{metrics.water_impact > 0 ? "live" : "0%"}</span>
                 </div>
                 <div className="h-[56px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
@@ -254,9 +272,9 @@ export default function SustainabilityInsightsPage() {
                     ) : (
                       <p className="text-3xl font-bold text-foreground">{metrics.renewable_coverage}%</p>
                     )}
-                    <p className="text-xs text-muted-foreground">{isLoading ? "Waiting for cloud telemetry..." : "No Data"}</p>
+                    <p className="text-xs text-muted-foreground">{isLoading ? "Waiting for cloud telemetry..." : "Live telemetry"}</p>
                   </div>
-                  <span className="text-xs text-neon-green">0%</span>
+                  <span className="text-xs text-neon-green">{metrics.renewable_coverage}%</span>
                 </div>
                 <div className="h-[56px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
@@ -299,7 +317,9 @@ export default function SustainabilityInsightsPage() {
                           />
                         </RadarChart>
                       </ResponsiveContainer>
-                      <p className="text-xs text-muted-foreground text-center -mt-10">No sustainability data available</p>
+                      <p className="text-xs text-muted-foreground text-center -mt-10">
+                        {isBackendConnected ? "Live sustainability telemetry" : "No sustainability data available"}
+                      </p>
                     </>
                   )}
                 </CardContent>
@@ -382,12 +402,14 @@ export default function SustainabilityInsightsPage() {
                         ) : (
                           <p className="text-3xl font-bold text-neon-green">{metrics.sustainability_score} / 100</p>
                         )}
-                        <p className="text-xs text-neon-green animate-pulse">{isLoading ? "Waiting for cloud telemetry..." : "No Data"}</p>
+                        <p className="text-xs text-neon-green animate-pulse">
+                          {isLoading ? "Waiting for cloud telemetry..." : isBackendConnected ? "Live telemetry" : "No Data"}
+                        </p>
                       </div>
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground text-center">
-                    Connect backend to view sustainability analytics.
+                    {isBackendConnected ? "Telemetry connected across AWS + Azure." : "Connect backend to view sustainability analytics."}
                   </p>
                 </CardContent>
               </Card>
@@ -415,7 +437,7 @@ export default function SustainabilityInsightsPage() {
                           <p className="text-xs text-muted-foreground mt-1">{rec.description}</p>
                           <div className="flex items-center justify-between mt-3">
                             <span className="text-[11px] px-2 py-0.5 rounded-full bg-neon-green/15 text-neon-green border border-neon-green/30">
-                              {isLoading ? "No Data" : rec.impact}
+                              {isLoading ? "No Data" : isBackendConnected ? rec.impact : "No Data"}
                             </span>
                             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!isBackendConnected}>
                               Apply
@@ -457,6 +479,17 @@ export default function SustainabilityInsightsPage() {
               </CardContent>
             </Card>
           </motion.div>
+
+          {error && (
+            <Card className="glass-card border-border">
+              <CardContent className="p-4 flex items-center justify-between">
+                <p className="text-sm text-destructive">Unable to fetch cloud telemetry: {error}</p>
+                <Button variant="outline" size="sm" onClick={loadMetrics}>
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
     </div>

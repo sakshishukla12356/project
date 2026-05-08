@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import {
   AreaChart,
@@ -26,39 +27,111 @@ import {
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { telemetryApi, type DashboardPayload } from "@/src/services/api"
 
-const costTrendData = [
-  { date: "Mon", cost: 8500 },
-  { date: "Tue", cost: 9200 },
-  { date: "Wed", cost: 8800 },
-  { date: "Thu", cost: 7900 },
-  { date: "Fri", cost: 8100 },
-  { date: "Sat", cost: 6500 },
-  { date: "Sun", cost: 5800 },
-]
-
-const resourceDistribution = [
-  { name: "EC2", value: 35, color: "#3b82f6" },
-  { name: "RDS", value: 25, color: "#06b6d4" },
-  { name: "S3", value: 20, color: "#10b981" },
-  { name: "Lambda", value: 12, color: "#8b5cf6" },
-  { name: "Other", value: 8, color: "#6366f1" },
-]
-
-const recentAlerts = [
-  { type: "warning", message: "High CPU usage on prod-server-01", time: "5 min ago" },
-  { type: "critical", message: "Security group rule violation", time: "12 min ago" },
-  { type: "info", message: "Auto-scaling triggered", time: "25 min ago" },
-  { type: "success", message: "Cost optimization applied", time: "1 hour ago" },
-]
-
-const recommendations = [
-  { title: "Stop 4 idle EC2 instances", savings: "$1,200/mo" },
-  { title: "Convert to Reserved Instances", savings: "$3,500/mo" },
-  { title: "Delete unused EBS volumes", savings: "$450/mo" },
-]
+const zeroDashboard: DashboardPayload = {
+  provider: "aws",
+  monthly_cost: 0,
+  active_resources: 0,
+  security_score: 0,
+  savings_potential: 0,
+  resources: { ec2: 0, rds: 0, s3: 0, lambda: 0, other: 0 },
+  resource_distribution: [
+    { name: "EC2", value: 0, color: "#3b82f6" },
+    { name: "RDS", value: 0, color: "#06b6d4" },
+    { name: "S3", value: 0, color: "#10b981" },
+    { name: "Lambda", value: 0, color: "#8b5cf6" },
+    { name: "Other", value: 0, color: "#6366f1" },
+  ],
+  cost_trend_7d: Array.from({ length: 7 }, (_, i) => ({ date: String(i + 1), cost: 0 })),
+  recent_alerts: [],
+  recommendations: [],
+}
 
 export default function DashboardPage() {
+  const [selectedProvider, setSelectedProvider] = useState<"AWS" | "Azure" | "GCP">("AWS")
+  const [awsData, setAwsData] = useState<DashboardPayload>(zeroDashboard)
+  const [azureData, setAzureData] = useState<DashboardPayload>({ ...zeroDashboard, provider: "azure" })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadDashboard = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const [aws, azure] = await Promise.all([
+        telemetryApi.getAwsDashboard(),
+        telemetryApi.getAzureDashboard(),
+      ])
+      setAwsData({
+        ...zeroDashboard,
+        ...aws,
+        resource_distribution: aws.resource_distribution?.length
+          ? aws.resource_distribution
+          : zeroDashboard.resource_distribution,
+        cost_trend_7d: aws.cost_trend_7d?.length ? aws.cost_trend_7d : zeroDashboard.cost_trend_7d,
+      })
+      setAzureData({
+        ...zeroDashboard,
+        ...azure,
+        resource_distribution: azure.resource_distribution?.length
+          ? azure.resource_distribution
+          : zeroDashboard.resource_distribution,
+        cost_trend_7d: azure.cost_trend_7d?.length ? azure.cost_trend_7d : zeroDashboard.cost_trend_7d,
+      })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to fetch cloud telemetry")
+      setAwsData(zeroDashboard)
+      setAzureData({ ...zeroDashboard, provider: "azure" })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void loadDashboard()
+  }, [])
+
+  const currentData = useMemo(() => {
+    if (selectedProvider === "Azure") return azureData
+    if (selectedProvider === "GCP") return { ...zeroDashboard, provider: "gcp" }
+    return awsData
+  }, [selectedProvider, awsData, azureData])
+
+  const stats = [
+    {
+      icon: DollarSign,
+      label: "Monthly Cost",
+      value: `$${(currentData.monthly_cost || 0).toLocaleString()}`,
+      change: "live",
+      positive: true,
+    },
+    {
+      icon: TrendingDown,
+      label: "Savings Potential",
+      value: `$${(currentData.savings_potential || 0).toLocaleString()}`,
+      change: "live",
+      positive: true,
+    },
+    {
+      icon: Shield,
+      label: "Security Score",
+      value: `${currentData.security_score || 0}/100`,
+      change: "live",
+      positive: true,
+    },
+    {
+      icon: Server,
+      label: "Active Resources",
+      value: `${currentData.active_resources || 0}`,
+      change: "live",
+      positive: false,
+    },
+  ]
+
+  const hasAnyData = currentData.cost_trend_7d.some((d) => d.cost > 0)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -69,13 +142,13 @@ export default function DashboardPage() {
       >
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back, John. Here&apos;s your cloud overview.</p>
+          <p className="text-muted-foreground">Live cloud overview from AWS and Azure telemetry.</p>
         </div>
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" className="relative">
             <Bell className="w-4 h-4" />
             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-[10px] text-destructive-foreground flex items-center justify-center">
-              3
+              {currentData.recent_alerts.length}
             </span>
           </Button>
           <Button className="neon-glow">
@@ -92,12 +165,7 @@ export default function DashboardPage() {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
       >
-        {[
-          { icon: DollarSign, label: "Monthly Cost", value: "$54,820", change: "-12%", positive: true },
-          { icon: TrendingDown, label: "Savings Potential", value: "$18,500", change: "+8%", positive: true },
-          { icon: Shield, label: "Security Score", value: "87/100", change: "+5", positive: true },
-          { icon: Server, label: "Active Resources", value: "156", change: "+3", positive: false },
-        ].map((stat, index) => (
+        {stats.map((stat, index) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -113,7 +181,11 @@ export default function DashboardPage() {
                   <span className="text-sm text-muted-foreground">{stat.label}</span>
                 </div>
                 <div className="flex items-end justify-between">
-                  <span className="text-2xl font-bold text-foreground">{stat.value}</span>
+                  {isLoading ? (
+                    <Skeleton className="h-8 w-24" />
+                  ) : (
+                    <span className="text-2xl font-bold text-foreground">{stat.value}</span>
+                  )}
                   <span className={`text-xs ${stat.positive ? "text-neon-green" : "text-destructive"}`}>
                     {stat.change}
                   </span>
@@ -138,10 +210,16 @@ export default function DashboardPage() {
               <CardTitle className="flex items-center justify-between text-foreground">
                 <span>Cost Trend (7 Days)</span>
                 <div className="flex gap-2">
-                  {["AWS", "Azure", "GCP"].map((provider) => (
-                    <span key={provider} className="px-2 py-1 text-xs rounded-md glass">
+                  {(["AWS", "Azure", "GCP"] as const).map((provider) => (
+                    <button
+                      key={provider}
+                      onClick={() => setSelectedProvider(provider)}
+                      className={`px-2 py-1 text-xs rounded-md glass ${
+                        selectedProvider === provider ? "text-primary border border-primary/40" : ""
+                      }`}
+                    >
                       {provider}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </CardTitle>
@@ -149,7 +227,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="h-[250px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={costTrendData}>
+                  <AreaChart data={currentData.cost_trend_7d}>
                     <defs>
                       <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
@@ -158,7 +236,7 @@ export default function DashboardPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                     <XAxis dataKey="date" stroke="rgba(255,255,255,0.5)" fontSize={12} />
-                    <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} tickFormatter={(v) => `$${v / 1000}k`} />
+                    <YAxis stroke="rgba(255,255,255,0.5)" fontSize={12} tickFormatter={(v) => `$${v}`} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: "rgba(8, 12, 24, 0.9)",
@@ -170,6 +248,9 @@ export default function DashboardPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+              {!hasAnyData && !isLoading && (
+                <p className="text-xs text-muted-foreground mt-2">No cost trend data available.</p>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -189,7 +270,7 @@ export default function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={resourceDistribution}
+                      data={currentData.resource_distribution}
                       cx="50%"
                       cy="50%"
                       innerRadius={50}
@@ -197,7 +278,7 @@ export default function DashboardPage() {
                       paddingAngle={2}
                       dataKey="value"
                     >
-                      {resourceDistribution.map((entry, index) => (
+                      {currentData.resource_distribution.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -212,11 +293,11 @@ export default function DashboardPage() {
                 </ResponsiveContainer>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-2">
-                {resourceDistribution.map((item) => (
+                {currentData.resource_distribution.map((item) => (
                   <div key={item.name} className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="text-xs text-muted-foreground">{item.name}</span>
-                    <span className="text-xs font-medium text-foreground ml-auto">{item.value}%</span>
+                    <span className="text-xs font-medium text-foreground ml-auto">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -242,15 +323,18 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentAlerts.map((alert, index) => (
+                {currentData.recent_alerts.length === 0 && !isLoading && (
+                  <div className="text-sm text-muted-foreground">No recent alerts.</div>
+                )}
+                {currentData.recent_alerts.map((alert, index) => (
                   <div
                     key={index}
                     className={`flex items-start gap-3 p-3 rounded-lg glass border-l-4 ${
-                      alert.type === "critical"
+                      alert.severity === "CRITICAL"
                         ? "border-l-destructive"
-                        : alert.type === "warning"
+                        : alert.severity === "WARNING"
                         ? "border-l-yellow-500"
-                        : alert.type === "success"
+                        : alert.severity === "INFO"
                         ? "border-l-neon-green"
                         : "border-l-primary"
                     }`}
@@ -258,7 +342,7 @@ export default function DashboardPage() {
                     <Activity className="w-4 h-4 text-muted-foreground mt-0.5" />
                     <div className="flex-1">
                       <p className="text-sm text-foreground">{alert.message}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{alert.time}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{alert.created_at || "Telemetry event"}</p>
                     </div>
                   </div>
                 ))}
@@ -282,7 +366,10 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recommendations.map((rec, index) => (
+                {currentData.recommendations.length === 0 && !isLoading && (
+                  <div className="text-sm text-muted-foreground">No optimization recommendations yet.</div>
+                )}
+                {currentData.recommendations.map((rec, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-3 rounded-lg glass hover:neon-glow transition-all cursor-pointer group"
@@ -291,7 +378,7 @@ export default function DashboardPage() {
                       <p className="text-sm text-foreground group-hover:text-primary transition-colors">
                         {rec.title}
                       </p>
-                      <p className="text-xs text-neon-green mt-1">Save {rec.savings}</p>
+                      <p className="text-xs text-neon-green mt-1">Save ${rec.savings_usd}</p>
                     </div>
                     <Button size="sm" variant="outline">
                       Apply
@@ -306,6 +393,17 @@ export default function DashboardPage() {
           </Card>
         </motion.div>
       </div>
+
+      {error && (
+        <Card className="glass-card border-border">
+          <CardContent className="p-4 flex items-center justify-between">
+            <p className="text-sm text-destructive">Unable to fetch cloud telemetry: {error}</p>
+            <Button variant="outline" size="sm" onClick={loadDashboard}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
