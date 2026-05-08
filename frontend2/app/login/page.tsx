@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Eye, EyeOff, Shield, Lock, Key, Github, Mail, CheckCircle2 } from "lucide-react"
 import { VortexBackground } from "@/components/landing/vortex-background"
+import { apiClient } from "@/src/services/api"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,10 +19,34 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate login
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setIsLoading(false)
-    router.push("/onboarding/cloud-select")
+  
+    try {
+      const response = await apiClient.post("/auth/login", {
+          email,
+          password,
+      })
+      const data = response.data
+  
+      // Store JWT token
+      if (rememberMe) {
+        sessionStorage.removeItem("access_token")
+        localStorage.setItem("access_token", data.access_token)
+      } else {
+        localStorage.removeItem("access_token")
+        sessionStorage.setItem("access_token", data.access_token)
+      }
+      window.dispatchEvent(new Event("auth-token-changed"))
+  
+      // Optional: store user info
+      localStorage.setItem("user", JSON.stringify(data.user))
+  
+      router.push("/onboarding/cloud-select")
+    } catch (error: any) {
+      console.error(error)
+      alert(error.message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleOAuthLogin = async (provider: string) => {

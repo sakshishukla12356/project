@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
+import { TelemetryProvider } from '@/src/context/TelemetryContext'
 
 const geistSans = Geist({ 
   subsets: ["latin"],
@@ -37,7 +38,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
-        {children}
+        <TelemetryProvider>{children}</TelemetryProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

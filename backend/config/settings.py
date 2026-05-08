@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     GCP_BILLING_ACCOUNT_ID: str = ""
 
     # ── Security & Transport ─────────────────────
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "https://localhost:3000"
     REQUIRE_HTTPS: bool = False  # Set to True in production!
     COOKIE_SECURE: bool = False  # Set to True in production!
     ALLOWED_HOSTS: str = "*"     # Comma separated list for production, e.g., "api.cloudcost.com,cloudcost.com"

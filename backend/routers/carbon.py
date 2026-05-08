@@ -9,13 +9,13 @@ from middleware.auth import get_current_user
 from models.user import User
 from controllers import carbon_controller
 from services.carbon_service import get_emission_factors_table
+from services.realtime_bus import realtime_bus
 
 router = APIRouter(prefix="/carbon", tags=["Carbon"])
 
 
 @router.get("")
 async def total_carbon(
-    mock: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -30,7 +30,20 @@ async def total_carbon(
     - services: per-resource carbon detail
     - emission_factors: region → kgCO2/kWh lookup tables
     """
-    return await carbon_controller.get_total_carbon(current_user.id, db, mock=mock)
+    out = await carbon_controller.get_total_carbon(current_user.id, db)
+    await realtime_bus.publish(
+        "carbon_metrics_updated",
+        {
+            "total_carbon_kg": out.get("total_carbon_kg", 0.0),
+            "total_energy_kwh": out.get("total_energy_kwh", 0.0),
+            "total_cost_usd": out.get("total_cost_usd", 0.0),
+            "carbon_by_provider": out.get("carbon_by_provider", {}),
+            "carbon_by_region": out.get("carbon_by_region", {}),
+            "service_count": out.get("service_count", 0),
+            "note": out.get("note"),
+        },
+    )
+    return out
 
 
 @router.get("/saved")

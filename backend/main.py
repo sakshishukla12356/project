@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from config.settings import get_settings
 from database.base import init_db
-from routers import auth, aws, azure, gcp, carbon, dashboard, chatbot, cloud_actions, cloud_account, security, energy_efficiency, sustainability, telemetry
+from routers import auth, aws, azure, gcp, carbon, dashboard, chatbot, cloud_actions, cloud_account, security, energy_efficiency, sustainability, telemetry, optimization, realtime
 from middleware.security_monitor import SecurityMonitorMiddleware
 from middleware.rate_limit import RateLimitMiddleware
 
@@ -81,7 +81,15 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-   allow_origins=["*"],
+    allow_origins=[
+        settings.FRONTEND_URL.rstrip("/"),
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "https://localhost:3000",
+        "https://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -121,6 +129,8 @@ app.include_router(security.router, prefix="/security", tags=["Security Dashboar
 app.include_router(energy_efficiency.router, prefix="/api", tags=["Energy Efficiency"])
 app.include_router(sustainability.router, prefix="/api", tags=["Sustainability"])
 app.include_router(telemetry.router)
+app.include_router(optimization.router)
+app.include_router(realtime.router)
 
 
 

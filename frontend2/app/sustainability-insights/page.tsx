@@ -12,19 +12,7 @@ import {
   PolarAngleAxis,
   Radar,
 } from "recharts"
-import {
-  Leaf,
-  Zap,
-  Droplets,
-  Trees,
-  Factory,
-  Gauge,
-  CloudCog,
-  Server,
-  Scale,
-  ArrowRight,
-  ShieldCheck,
-} from "lucide-react"
+import { Leaf, Zap, Droplets, Trees, Factory, Gauge, ArrowRight, ShieldCheck } from "lucide-react"
 import { DashboardSidebar } from "@/components/dashboard/sidebar"
 import { VortexBackground } from "@/components/landing/vortex-background"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -68,32 +56,7 @@ const emptyRadar = [
   { metric: "Resource Optimization", score: 0 },
 ]
 
-const recommendations = [
-  {
-    icon: Server,
-    title: "Right-size Instances",
-    description: "Downsize over-provisioned compute resources to reduce energy overhead.",
-    impact: "High Impact",
-  },
-  {
-    icon: Leaf,
-    title: "Use Renewable Regions",
-    description: "Migrate workloads to regions with higher renewable energy penetration.",
-    impact: "High Impact",
-  },
-  {
-    icon: CloudCog,
-    title: "Enable Auto Scaling",
-    description: "Scale resources dynamically to prevent waste during low-traffic periods.",
-    impact: "Medium Impact",
-  },
-  {
-    icon: Scale,
-    title: "Optimize Storage",
-    description: "Archive cold data and tune storage tiers for lower environmental impact.",
-    impact: "Medium Impact",
-  },
-]
+type SustainabilityRecommendation = string
 
 const howItWorks = [
   "Collect AWS/Azure telemetry",
@@ -104,6 +67,7 @@ const howItWorks = [
 
 export default function SustainabilityInsightsPage() {
   const [metrics, setMetrics] = useState<SustainabilityMetrics>(initialMetrics)
+  const [recommendations, setRecommendations] = useState<SustainabilityRecommendation[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isBackendConnected, setIsBackendConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -125,9 +89,12 @@ export default function SustainabilityInsightsPage() {
         trees_planted: (aws.trees_planted || 0) + (azure.trees_planted || 0),
         energy_consumed: (aws.energy_consumed || 0) + (azure.energy_consumed || 0),
       })
+      const recs = [...(aws.recommendations || []), ...(azure.recommendations || [])].filter(Boolean)
+      setRecommendations(recs.length ? recs : [])
       setIsBackendConnected(true)
     } catch (e) {
       setMetrics(initialMetrics)
+      setRecommendations([])
       setIsBackendConnected(false)
       setError(e instanceof Error ? e.message : "Unable to fetch cloud telemetry")
     } finally {
@@ -421,9 +388,14 @@ export default function SustainabilityInsightsPage() {
                   <CardTitle className="text-foreground">Sustainability Recommendations</CardTitle>
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
+                  {!isLoading && recommendations.length === 0 && (
+                    <div className="text-sm text-muted-foreground md:col-span-2">
+                      No recommendations available. Connect cloud account(s) to begin monitoring.
+                    </div>
+                  )}
                   {recommendations.map((rec, index) => (
                     <motion.div
-                      key={rec.title}
+                      key={`${rec}-${index}`}
                       initial={{ opacity: 0, y: 14 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.4 + index * 0.08 }}
@@ -431,13 +403,13 @@ export default function SustainabilityInsightsPage() {
                       className="rounded-xl p-4 glass border border-border hover:border-neon-green/40 hover:shadow-[0_0_25px_rgba(16,185,129,0.2)] transition-all"
                     >
                       <div className="flex items-start gap-3">
-                        <rec.icon className="w-5 h-5 text-neon-green mt-0.5" />
+                        <Leaf className="w-5 h-5 text-neon-green mt-0.5" />
                         <div className="flex-1">
-                          <h4 className="text-sm font-semibold text-foreground">{rec.title}</h4>
-                          <p className="text-xs text-muted-foreground mt-1">{rec.description}</p>
+                          <h4 className="text-sm font-semibold text-foreground">Recommendation</h4>
+                          <p className="text-xs text-muted-foreground mt-1">{rec}</p>
                           <div className="flex items-center justify-between mt-3">
                             <span className="text-[11px] px-2 py-0.5 rounded-full bg-neon-green/15 text-neon-green border border-neon-green/30">
-                              {isLoading ? "No Data" : isBackendConnected ? rec.impact : "No Data"}
+                              {isLoading ? "No Data" : isBackendConnected ? "Live telemetry" : "No Data"}
                             </span>
                             <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!isBackendConnected}>
                               Apply

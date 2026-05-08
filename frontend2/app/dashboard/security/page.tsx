@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,67 +17,59 @@ import {
   XCircle,
   RefreshCw,
 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useTelemetry } from "@/src/context/TelemetryContext"
 
-const securityMetrics = [
-  { label: "IAM Score", value: 92, icon: Key, status: "good" },
-  { label: "Network Security", value: 88, icon: Server, status: "good" },
-  { label: "Data Protection", value: 95, icon: Lock, status: "excellent" },
-  { label: "Compliance", value: 85, icon: CheckCircle, status: "good" },
-]
+type SecurityStats = {
+  total_events?: number
+  by_severity?: Record<string, number>
+  by_type?: Record<string, number>
+}
 
-const criticalAlerts = [
-  {
-    severity: "critical",
-    title: "Public S3 Bucket Detected",
-    resource: "prod-data-bucket",
-    time: "2 min ago",
-    description: "Bucket has public read access enabled",
-  },
-  {
-    severity: "critical",
-    title: "Root Account Activity",
-    resource: "AWS Root",
-    time: "1 hour ago",
-    description: "Root account used for console login",
-  },
-]
-
-const warnings = [
-  {
-    severity: "high",
-    title: "IAM Users Without MFA",
-    count: 3,
-    description: "Users: dev-user-1, staging-admin, test-account",
-  },
-  {
-    severity: "high",
-    title: "Open Security Groups",
-    count: 5,
-    description: "Allowing 0.0.0.0/0 on ports 22, 3389",
-  },
-  {
-    severity: "medium",
-    title: "Unencrypted EBS Volumes",
-    count: 8,
-    description: "Volumes attached to production instances",
-  },
-  {
-    severity: "low",
-    title: "Unused Access Keys",
-    count: 12,
-    description: "Keys not used in last 90 days",
-  },
-]
-
-const complianceStatus = [
-  { framework: "SOC 2 Type II", status: "compliant", lastAudit: "2024-01-15" },
-  { framework: "ISO 27001", status: "compliant", lastAudit: "2023-12-01" },
-  { framework: "HIPAA", status: "in-progress", lastAudit: "2024-02-28" },
-  { framework: "PCI DSS", status: "compliant", lastAudit: "2024-01-20" },
-  { framework: "GDPR", status: "compliant", lastAudit: "2023-11-15" },
-]
+type SecurityEvent = {
+  severity?: string
+  event_type?: string
+  message: string
+  created_at?: string
+}
 
 export default function SecurityPage() {
+  const { state, realtime, refreshAll } = useTelemetry()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Page-level loading indicator: context boots in layout and then streams updates.
+    setIsLoading(false)
+  }, [])
+
+  const criticalCount = (state.security.stats.by_severity || {}).CRITICAL || 0
+  const warningCount = (state.security.stats.by_severity || {}).WARNING || 0
+  const infoCount = (state.security.stats.by_severity || {}).INFO || 0
+
+  const criticalAlerts = useMemo(
+    () => state.security.events.filter((e) => (e.severity || "").toUpperCase() === "CRITICAL").slice(0, 10),
+    [state.security.events],
+  )
+  const warnings = useMemo(
+    () => state.security.events.filter((e) => (e.severity || "").toUpperCase() !== "CRITICAL").slice(0, 10),
+    [state.security.events],
+  )
+
+  const securityScore = useMemo(() => {
+    // Mirror backend heuristic used in telemetry endpoints (no fake positives; score is based on event volume/severity).
+    const total = state.security.stats.total_events || 0
+    const penalty = criticalCount * 8 + warningCount * 3 + Math.min(total, 20)
+    return Math.max(0, Math.min(100, 100 - penalty))
+  }, [state.security.stats.total_events, criticalCount, warningCount])
+
+  const securityMetrics = [
+    { label: "Security Score", value: securityScore, icon: Shield },
+    { label: "Critical Events", value: criticalCount, icon: XCircle },
+    { label: "Warnings", value: warningCount, icon: AlertTriangle },
+    { label: "Info", value: infoCount, icon: CheckCircle },
+  ]
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -89,10 +82,13 @@ export default function SecurityPage() {
           <h1 className="text-2xl font-bold text-foreground">Security Center</h1>
           <p className="text-muted-foreground">Monitor threats and maintain compliance</p>
         </div>
-        <Button className="neon-glow">
+        <div className="flex items-center gap-3">
+          <Button className="neon-glow" onClick={refreshAll}>
           <RefreshCw className="w-4 h-4 mr-2" />
           Run Security Scan
-        </Button>
+          </Button>
+          <span className="text-xs text-muted-foreground">{realtime.connected ? `Live: ${realtime.transport}` : "Reconnecting…"}</span>
+        </div>
       </motion.div>
 
       {/* Security Score Card */}
@@ -133,25 +129,29 @@ export default function SecurityPage() {
                     </defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-3xl font-bold text-foreground">87</span>
+                    {isLoading ? (
+                      <Skeleton className="h-8 w-12" />
+                    ) : (
+                      <span className="text-3xl font-bold text-foreground">{securityScore}</span>
+                    )}
                     <span className="text-xs text-muted-foreground">/ 100</span>
                   </div>
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold text-foreground">Overall Security Score</h3>
-                  <p className="text-muted-foreground">Your infrastructure is well protected</p>
+                  <p className="text-muted-foreground">{isLoading ? "Fetching cloud telemetry..." : "Based on the last 24 hours of security telemetry."}</p>
                   <div className="flex gap-4 mt-4">
                     <div className="flex items-center gap-2">
                       <XCircle className="w-4 h-4 text-destructive" />
-                      <span className="text-sm text-muted-foreground">2 Critical</span>
+                      <span className="text-sm text-muted-foreground">{criticalCount} Critical</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                      <span className="text-sm text-muted-foreground">5 Warnings</span>
+                      <span className="text-sm text-muted-foreground">{warningCount} Warnings</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-neon-green" />
-                      <span className="text-sm text-muted-foreground">28 Passed</span>
+                      <span className="text-sm text-muted-foreground">{infoCount} Info</span>
                     </div>
                   </div>
                 </div>
@@ -164,8 +164,12 @@ export default function SecurityPage() {
                       <span className="text-xs text-muted-foreground">{metric.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-bold text-foreground">{metric.value}%</span>
-                      <Progress value={metric.value} className="h-1.5 flex-1" />
+                      {isLoading ? (
+                        <Skeleton className="h-5 w-16" />
+                      ) : (
+                        <span className="text-lg font-bold text-foreground">{metric.value}</span>
+                      )}
+                      <Progress value={Number(metric.value) || 0} className="h-1.5 flex-1" />
                     </div>
                   </div>
                 ))}
@@ -190,6 +194,9 @@ export default function SecurityPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {criticalAlerts.length === 0 && !isLoading && (
+                <div className="text-sm text-muted-foreground">No critical alerts in the last 24 hours.</div>
+              )}
               {criticalAlerts.map((alert, index) => (
                 <div
                   key={index}
@@ -197,11 +204,10 @@ export default function SecurityPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="font-medium text-foreground">{alert.title}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">{alert.description}</p>
-                      <p className="text-xs text-muted-foreground mt-2">Resource: {alert.resource}</p>
+                      <h4 className="font-medium text-foreground">{alert.event_type || "Critical Event"}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">{alert.message}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">{alert.time}</span>
+                    <span className="text-xs text-muted-foreground">{alert.created_at || "Telemetry event"}</span>
                   </div>
                   <Button size="sm" variant="destructive" className="mt-3">
                     Remediate Now
@@ -226,13 +232,14 @@ export default function SecurityPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {warnings.length === 0 && !isLoading && (
+                <div className="text-sm text-muted-foreground">No warnings in the last 24 hours.</div>
+              )}
               {warnings.map((warning, index) => (
                 <div
                   key={index}
                   className={`p-3 rounded-xl glass border-l-4 ${
-                    warning.severity === "high"
-                      ? "border-l-yellow-500"
-                      : warning.severity === "medium"
+                    (warning.severity || "").toUpperCase() === "WARNING"
                       ? "border-l-primary"
                       : "border-l-muted"
                   }`}
@@ -240,12 +247,9 @@ export default function SecurityPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-medium text-foreground">{warning.title}</h4>
-                        <span className="px-2 py-0.5 rounded text-xs bg-muted text-muted-foreground">
-                          {warning.count}
-                        </span>
+                        <h4 className="text-sm font-medium text-foreground">{warning.event_type || "Event"}</h4>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">{warning.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{warning.message}</p>
                     </div>
                     <Button size="sm" variant="ghost">
                       Fix
@@ -272,33 +276,23 @@ export default function SecurityPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-5 gap-4">
-              {complianceStatus.map((item) => (
-                <div key={item.framework} className="glass rounded-xl p-4 text-center">
-                  <h4 className="font-medium text-foreground text-sm">{item.framework}</h4>
-                  <div className="mt-2">
-                    {item.status === "compliant" ? (
-                      <CheckCircle className="w-8 h-8 text-neon-green mx-auto" />
-                    ) : (
-                      <RefreshCw className="w-8 h-8 text-yellow-500 mx-auto animate-spin" />
-                    )}
-                  </div>
-                  <p
-                    className={`text-xs mt-2 ${
-                      item.status === "compliant" ? "text-neon-green" : "text-yellow-500"
-                    }`}
-                  >
-                    {item.status === "compliant" ? "Compliant" : "In Progress"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Last: {item.lastAudit}
-                  </p>
-                </div>
-              ))}
+            <div className="text-sm text-muted-foreground">
+              No compliance telemetry available. Connect governance/compliance integrations to begin monitoring.
             </div>
           </CardContent>
         </Card>
       </motion.div>
+
+      {error && (
+        <Card className="glass-card border-border">
+          <CardContent className="p-4 flex items-center justify-between">
+            <p className="text-sm text-destructive">Unable to fetch cloud telemetry: {error}</p>
+            <Button variant="outline" size="sm" onClick={refreshAll}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

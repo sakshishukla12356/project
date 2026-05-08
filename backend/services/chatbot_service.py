@@ -1,13 +1,16 @@
-from services.aws_service import get_running_instances
-from services.azure_service import get_running_vms
-
-from models.cloud_account import CloudAccount
-from sqlalchemy.orm import Session
+from __future__ import annotations
 
 import re
 import time
 from collections import defaultdict
 from html import escape
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from models.cloud_account import CloudAccount
+from services.aws_service import get_running_instances
+from services.azure_service import get_running_vms
 
 
 # ─────────────────────────────────────────────
@@ -102,10 +105,10 @@ def safe_response(text: str) -> str:
 # ─────────────────────────────────────────────
 # 🤖 MAIN CHATBOT FUNCTION
 # ─────────────────────────────────────────────
-def get_ai_response(
+async def get_ai_response(
     user_message: str,
     user_id: int,
-    db: Session,
+    db: AsyncSession,
 ):
 
     # 🔐 Rate limiting
@@ -123,9 +126,8 @@ def get_ai_response(
         show_azure = True
 
     # 🔥 Fetch accounts
-    accounts = db.query(CloudAccount).filter(
-        CloudAccount.user_id == user_id
-    ).all()
+    res = await db.execute(select(CloudAccount).where(CloudAccount.user_id == user_id))
+    accounts = res.scalars().all()
 
     aws_account = next(
         (a for a in accounts if a.provider == "aws"),
@@ -207,10 +209,6 @@ def get_ai_response(
             "resource_id": vm,
         })
 
-    # 💰 Savings estimate
-    monthly = total_resources * 500
-    yearly = monthly * 12
-
     # ☁️ Provider message
     if show_aws and show_azure:
         provider_msg = "AWS and Azure"
@@ -221,27 +219,15 @@ def get_ai_response(
     else:
         provider_msg = "Azure"
 
-    # ✅ Final response
+    # ✅ Final response (no fabricated savings estimates)
+    if total_resources == 0:
+        message = "No running resources detected. Connect a cloud account to begin monitoring."
+    else:
+        message = f"Detected {total_resources} running resources in {provider_msg}."
+
     return {
-
-        "message": safe_response(
-            f"You have {total_resources} running resources "
-            f"in {provider_msg}."
-        ),
-
+        "message": safe_response(message),
         "insights": insights,
-
         "actions": actions,
-
-        "savings": {
-            "monthly": f"₹{monthly}",
-            "yearly": f"₹{yearly}",
-        },
-
-        "finance_advice": [
-            "Reduce unused resources to save costs",
-            "Use auto-scaling for efficient cloud usage",
-            "Enable monitoring for suspicious activity",
-            "Invest saved money into smart financial plans",
-        ],
+        "note": "Savings estimates are unavailable until an optimization engine is configured.",
     }

@@ -38,7 +38,7 @@ async def chat(
     Only authenticated users can access.
     """
 
-    response = get_ai_response(request.message)
+    response = await get_ai_response(request.message, current_user.id, db)
 
     return {
         "user_id": current_user.id,

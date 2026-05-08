@@ -13,7 +13,7 @@ const testimonials = [
     avatar: "SC",
     rating: 5,
     content:
-      "Cloud Cost Guard has transformed how we manage our AWS infrastructure. We reduced our monthly cloud spend by 42% in just three months while improving our security posture.",
+      "Cloud Cost Guard transformed how we manage our AWS infrastructure. The dashboard gives us clear, real-time visibility into costs and security posture.",
   },
   {
     name: "Marcus Williams",
@@ -40,7 +40,7 @@ const testimonials = [
     avatar: "JK",
     rating: 5,
     content:
-      "As a startup, every dollar counts. Cloud Cost Guard identified $15,000 in monthly savings we were leaving on the table. The ROI was evident within the first week.",
+      "As a startup, every dollar counts. Cloud Cost Guard helped us pinpoint waste and prioritize the next best actions without guesswork.",
   },
   {
     name: "Lisa Thompson",
@@ -58,7 +58,7 @@ const testimonials = [
     avatar: "DP",
     rating: 5,
     content:
-      "The carbon tracking feature helped us meet our sustainability goals. We reduced our cloud carbon footprint by 35% while also cutting costs. Win-win for the business and environment.",
+      "The carbon tracking feature helped us align sustainability goals with infrastructure decisions using real telemetry from our cloud accounts.",
   },
 ]
 

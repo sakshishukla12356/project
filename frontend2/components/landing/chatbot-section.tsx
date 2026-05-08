@@ -19,24 +19,12 @@ const demoConversation = [
   },
   {
     role: "assistant",
-    content: `Based on your current cloud usage, here's the breakdown:
+    content: `I can answer this using your connected cloud telemetry.
 
-**Top 3 Expenses:**
-1. **EC2 Instances** - $34,500 (38%)
-   - 12 instances running 24/7
-   - 4 instances appear idle
-
-2. **RDS Databases** - $22,300 (25%)
-   - 3 production databases
-   - Dev database running during off-hours
-
-3. **Data Transfer** - $15,200 (17%)
-   - Cross-region transfers increased 40%
-
-**💡 Recommendation:** You could save ~$8,500/month by:
-- Stopping 4 idle EC2 instances
-- Scheduling dev database shutdown
-- Using VPC endpoints for S3 access`,
+To get a real breakdown, connect your cloud account(s) and then ask:
+- "Show my current top services by cost"
+- "List running instances and recent security events"
+- "Summarize optimization opportunities based on utilization"`,
   },
 ]
 

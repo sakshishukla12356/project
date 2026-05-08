@@ -9,19 +9,19 @@ const floatingCards = [
   {
     icon: TrendingDown,
     title: "Cost Reduced",
-    value: "-42%",
+    value: "—",
     color: "text-accent",
   },
   {
     icon: Shield,
     title: "Security Score",
-    value: "98/100",
+    value: "—",
     color: "text-primary",
   },
   {
     icon: Zap,
     title: "Resources Optimized",
-    value: "156",
+    value: "—",
     color: "text-neon-cyan",
   },
 ]
@@ -59,7 +59,7 @@ export function HeroSection() {
             <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
               Monitor cloud costs, detect security risks, optimize resources, and manage 
               AWS/Azure infrastructure intelligently with our AI-powered platform. 
-              Save up to 40% on cloud spending.
+              Connect your cloud accounts to unlock live analytics.
             </p>
 
             <div className="flex flex-wrap gap-4">
@@ -78,9 +78,9 @@ export function HeroSection() {
             {/* Stats */}
             <div className="grid grid-cols-3 gap-6 pt-8">
               {[
-                { value: "$2.5B+", label: "Cloud costs optimized" },
-                { value: "500+", label: "Enterprise clients" },
-                { value: "99.9%", label: "Uptime guarantee" },
+                { value: "—", label: "Telemetry-driven savings" },
+                { value: "—", label: "Connected accounts" },
+                { value: "—", label: "Uptime" },
               ].map((stat, index) => (
                 <motion.div
                   key={stat.label}

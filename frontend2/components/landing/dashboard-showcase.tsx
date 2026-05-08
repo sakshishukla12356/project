@@ -11,13 +11,13 @@ const dashboards = [
     icon: Cloud,
     color: "#ff9900",
     metrics: [
-      { label: "Monthly Cost", value: "$45,230", change: "-8%" },
-      { label: "EC2 Instances", value: "47", change: "+3" },
-      { label: "Security Score", value: "94", change: "+2" },
-      { label: "Optimization", value: "78%", change: "+5%" },
+      { label: "Monthly Cost", value: "$0", change: "live" },
+      { label: "EC2 Instances", value: "0", change: "live" },
+      { label: "Security Score", value: "0", change: "live" },
+      { label: "Optimization", value: "0%", change: "live" },
     ],
-    alerts: 3,
-    recommendations: 8,
+    alerts: 0,
+    recommendations: 0,
   },
   {
     id: "azure",
@@ -25,13 +25,13 @@ const dashboards = [
     icon: Cloud,
     color: "#0089d6",
     metrics: [
-      { label: "Monthly Cost", value: "$32,180", change: "-12%" },
-      { label: "VMs", value: "28", change: "0" },
-      { label: "Security Score", value: "91", change: "+4" },
-      { label: "Optimization", value: "82%", change: "+8%" },
+      { label: "Monthly Cost", value: "$0", change: "live" },
+      { label: "VMs", value: "0", change: "live" },
+      { label: "Security Score", value: "0", change: "live" },
+      { label: "Optimization", value: "0%", change: "live" },
     ],
-    alerts: 2,
-    recommendations: 5,
+    alerts: 0,
+    recommendations: 0,
   },
   {
     id: "unified",
@@ -39,13 +39,13 @@ const dashboards = [
     icon: Server,
     color: "#3b82f6",
     metrics: [
-      { label: "Total Cost", value: "$95,420", change: "-10%" },
-      { label: "Resources", value: "156", change: "+5" },
-      { label: "Security Score", value: "92", change: "+3" },
-      { label: "Savings Potential", value: "$28.5K", change: "" },
+      { label: "Total Cost", value: "$0", change: "live" },
+      { label: "Resources", value: "0", change: "live" },
+      { label: "Security Score", value: "0", change: "live" },
+      { label: "Savings Potential", value: "$0", change: "live" },
     ],
-    alerts: 7,
-    recommendations: 15,
+    alerts: 0,
+    recommendations: 0,
   },
 ]
 
@@ -112,7 +112,7 @@ export function DashboardShowcase() {
               <currentDashboard.icon className="w-6 h-6" style={{ color: currentDashboard.color }} />
               <div>
                 <h3 className="font-semibold text-foreground">{currentDashboard.name}</h3>
-                <p className="text-xs text-muted-foreground">Last updated: Just now</p>
+                <p className="text-xs text-muted-foreground">Connect telemetry to view updates</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -156,7 +156,7 @@ export function DashboardShowcase() {
               ))}
             </div>
 
-            {/* Mock Dashboard UI */}
+            {/* Preview UI (no demo values) */}
             <div className="grid lg:grid-cols-3 gap-4">
               {/* Cost Chart */}
               <div className="lg:col-span-2 glass rounded-xl p-4 h-[200px]">
@@ -165,7 +165,7 @@ export function DashboardShowcase() {
                   <BarChart3 className="w-4 h-4 text-muted-foreground" />
                 </div>
                 <div className="h-[140px] flex items-end justify-between gap-2">
-                  {[65, 45, 55, 75, 60, 50, 40, 55, 45, 35, 30, 25].map((height, index) => (
+                  {Array.from({ length: 12 }, () => 0).map((height, index) => (
                     <motion.div
                       key={index}
                       initial={{ height: 0 }}
@@ -178,6 +178,7 @@ export function DashboardShowcase() {
                     />
                   ))}
                 </div>
+                <p className="text-xs text-muted-foreground mt-3">No telemetry available.</p>
               </div>
 
               {/* Quick Actions */}

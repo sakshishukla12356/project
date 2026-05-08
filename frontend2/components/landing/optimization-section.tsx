@@ -8,53 +8,50 @@ import { Button } from "@/components/ui/button"
 const optimizations = [
   {
     icon: Server,
-    title: "Idle EC2 Detection",
-    description: "Automatically identifies EC2 instances with low CPU utilization for termination or rightsizing",
-    savings: "$4,200/month",
-    instances: 8,
-    status: "actionable",
+    title: "Telemetry-based Rightsizing",
+    description: "Analyze utilization metrics to identify over-provisioned resources.",
+    savings: "—",
+    instances: 0,
+    status: "pending",
   },
   {
     icon: Clock,
-    title: "Reserved Instance Recommendations",
-    description: "Convert on-demand instances to reserved instances based on usage patterns",
-    savings: "$12,500/month",
-    instances: 15,
-    status: "actionable",
+    title: "Commitment Recommendations",
+    description: "Evaluate commitment options based on usage history.",
+    savings: "—",
+    instances: 0,
+    status: "pending",
   },
   {
     icon: Zap,
-    title: "Spot Instance Opportunities",
-    description: "Identify workloads suitable for spot instances with significant cost savings",
-    savings: "$6,800/month",
-    instances: 12,
+    title: "Spot Opportunities",
+    description: "Identify fault-tolerant workloads suitable for preemptible capacity.",
+    savings: "—",
+    instances: 0,
     status: "pending",
   },
   {
     icon: DollarSign,
-    title: "Rightsizing Analysis",
-    description: "Downsize over-provisioned instances to match actual resource requirements",
-    savings: "$5,000/month",
-    instances: 23,
-    status: "actionable",
+    title: "Storage Tiering",
+    description: "Detect cold data and apply lifecycle / tiering policies.",
+    savings: "—",
+    instances: 0,
+    status: "pending",
   },
 ]
 
 const autoScalingMetrics = [
-  { label: "Policies Active", value: "12" },
-  { label: "Auto-scaled Events", value: "847" },
-  { label: "Cost Avoided", value: "$18.5K" },
-  { label: "Uptime", value: "99.99%" },
+  { label: "Policies Active", value: "—" },
+  { label: "Auto-scaled Events", value: "—" },
+  { label: "Cost Avoided", value: "—" },
+  { label: "Uptime", value: "—" },
 ]
 
 export function OptimizationSection() {
   const ref = useRef(null)
   const isInView = useInView(ref, { once: true, margin: "-100px" })
 
-  const totalSavings = optimizations.reduce((sum, opt) => {
-    const amount = parseFloat(opt.savings.replace(/[^0-9.]/g, ""))
-    return sum + amount
-  }, 0)
+  const totalSavings = 0
 
   return (
     <section className="relative py-24">
@@ -85,10 +82,10 @@ export function OptimizationSection() {
         >
           <p className="text-muted-foreground mb-2">Total Estimated Monthly Savings</p>
           <div className="text-5xl font-bold text-primary neon-text">
-            ${totalSavings.toLocaleString()}
+            $0
           </div>
           <p className="text-sm text-muted-foreground mt-2">
-            Based on {optimizations.reduce((sum, opt) => sum + opt.instances, 0)} optimization opportunities
+            Connect telemetry to generate recommendations
           </p>
         </motion.div>
 

@@ -6,6 +6,7 @@ import { Bot, User, Send, Sparkles, TrendingDown, Shield, Server, Loader2 } from
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { chatbotApi } from "@/src/services/chatbotApi"
 
 const suggestedPrompts = [
   { icon: TrendingDown, text: "Why is my AWS bill high this month?" },
@@ -39,86 +40,22 @@ export default function ChatPage() {
     setInput("")
     setIsLoading(true)
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses: Record<string, string> = {
-        "why is my aws bill high": `Based on my analysis of your AWS account, here are the main cost drivers:
-
-**Top 3 Cost Increases:**
-1. **EC2 Compute** - Up 28% ($4,200 increase)
-   - 3 new m5.2xlarge instances added
-   - 4 instances running 24/7 with <5% utilization
-
-2. **Data Transfer** - Up 45% ($2,800 increase)
-   - Cross-region transfers increased significantly
-   - Consider using VPC endpoints
-
-3. **RDS Storage** - Up 15% ($1,100 increase)
-   - Automated backups consuming more space
-   - Consider cleanup of old snapshots
-
-**💡 Immediate Actions:**
-- Stop 4 underutilized EC2 instances → Save $1,200/mo
-- Enable S3 intelligent tiering → Save $450/mo
-- Delete unused EBS snapshots → Save $280/mo`,
-        "security risks": `I've identified the following security concerns in your infrastructure:
-
-**🔴 Critical (2 issues):**
-1. Public S3 bucket: \`prod-assets-bucket\`
-2. Security group allowing 0.0.0.0/0 on port 22
-
-**🟡 High (4 issues):**
-- 3 IAM users without MFA enabled
-- Root account accessed in last 7 days
-- 2 unencrypted EBS volumes
-- Outdated SSL certificate (expires in 5 days)
-
-**Recommended Actions:**
-1. Make S3 bucket private immediately
-2. Restrict SSH access to VPN IP range
-3. Enforce MFA for all IAM users
-
-Would you like me to generate remediation scripts?`,
-        "idle ec2": `I found **7 idle EC2 instances** based on the following criteria:
-- CPU utilization < 5% for 7+ days
-- Network traffic < 100 MB/day
-
-| Instance ID | Type | Region | Idle Days | Monthly Cost |
-|-------------|------|--------|-----------|--------------|
-| i-0abc123 | m5.large | us-east-1 | 14 | $68.40 |
-| i-0def456 | t3.medium | us-west-2 | 21 | $30.37 |
-| i-0ghi789 | c5.xlarge | eu-west-1 | 9 | $142.56 |
-| i-0jkl012 | m5.xlarge | us-east-1 | 18 | $152.64 |
-
-**Total potential savings: $4,832/month**
-
-Would you like me to:
-1. Generate a stop/terminate script
-2. Schedule automatic shutdown
-3. Right-size these instances instead`,
-        default: `I understand you're asking about "${input}". Let me analyze your cloud environment...
-
-Based on your current setup, here's what I found:
-- Your infrastructure is running 156 resources across 3 cloud providers
-- Current monthly spend: $54,820
-- Optimization potential: ~$18,500/month in savings
-
-Would you like me to dive deeper into any specific area?`,
-      }
-
-      const lowerInput = input.toLowerCase()
-      let response = responses.default
-      if (lowerInput.includes("bill") || lowerInput.includes("cost") || lowerInput.includes("high")) {
-        response = responses["why is my aws bill high"]
-      } else if (lowerInput.includes("security") || lowerInput.includes("risk")) {
-        response = responses["security risks"]
-      } else if (lowerInput.includes("idle") || lowerInput.includes("ec2") || lowerInput.includes("instance")) {
-        response = responses["idle ec2"]
-      }
-
-      setMessages((prev) => [...prev, { role: "assistant", content: response }])
+    try {
+      const result = await chatbotApi.chat(userMessage.content)
+      const payload = result.response
+      const insights = (payload.insights || []).slice(0, 8)
+      const text = [payload.message, ...insights.map((i) => `- ${i}`), payload.note ? `\n${payload.note}` : ""]
+        .filter(Boolean)
+        .join("\n")
+      setMessages((prev) => [...prev, { role: "assistant", content: text }])
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Unable to fetch cloud telemetry. ${e instanceof Error ? e.message : ""}`.trim() },
+      ])
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   return (

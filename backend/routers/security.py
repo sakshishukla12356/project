@@ -5,6 +5,7 @@ from database.base import get_db
 from middleware.auth import get_current_user
 from models.user import User
 from services.security_service import get_recent_events, get_event_stats
+from services.realtime_bus import realtime_bus
 
 router = APIRouter()
 
@@ -18,7 +19,9 @@ async def security_stats(
     Get aggregated security metrics for the dashboard.
     Requires authentication (in a real app, you'd check current_user.is_superuser).
     """
-    return await get_event_stats(db, hours)
+    out = await get_event_stats(db, hours)
+    await realtime_bus.publish("security_alert_generated", {"stats": out, "hours": hours})
+    return out
 
 @router.get("/events")
 async def security_events(
@@ -33,7 +36,7 @@ async def security_events(
     """
     Get raw security event logs.
     """
-    return await get_recent_events(
+    out = await get_recent_events(
         db,
         limit=limit,
         severity=severity,
@@ -41,3 +44,8 @@ async def security_events(
         ip_address=ip_address,
         hours=hours
     )
+    await realtime_bus.publish(
+        "security_alert_generated",
+        {"events_count": len(out) if isinstance(out, list) else None, "hours": hours},
+    )
+    return out

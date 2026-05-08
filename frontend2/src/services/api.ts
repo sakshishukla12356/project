@@ -1,6 +1,21 @@
 import axios, { AxiosError } from "axios"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"
+function normalizeApiBaseUrl(raw: string) {
+  try {
+    const parsed = new URL(raw)
+    const isLocalHost = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost"
+    if (isLocalHost && parsed.protocol === "https:") {
+      parsed.protocol = "http:"
+    }
+    return parsed.toString().replace(/\/$/, "")
+  } catch {
+    return "http://127.0.0.1:8000"
+  }
+}
+
+const API_BASE_URL = normalizeApiBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000",
+)
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -14,10 +29,11 @@ apiClient.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const rawToken =
       window.localStorage.getItem("access_token") ||
-      window.localStorage.getItem("token") ||
+      window.sessionStorage.getItem("access_token") ||
       ""
     const token = rawToken.startsWith("Bearer ") ? rawToken.slice(7) : rawToken
     if (token) {
+      config.headers = config.headers ?? {}
       config.headers.Authorization = `Bearer ${token}`
     }
   }
@@ -27,6 +43,14 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<{ detail?: string }>) => {
+    if (error.response?.status === 401 && typeof window !== "undefined") {
+      window.localStorage.removeItem("access_token")
+      window.sessionStorage.removeItem("access_token")
+      window.dispatchEvent(new Event("auth-token-changed"))
+      if (window.location.pathname !== "/login") {
+        window.location.href = "/login"
+      }
+    }
     const message = error.response?.data?.detail || error.message || "API request failed"
     return Promise.reject(new Error(message))
   },

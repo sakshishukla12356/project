@@ -16,6 +16,7 @@ from models.user import User
 from services.aws_service import fetch_aws_cost_trend, summarize_aws_resources
 from services import azure_service
 from services.security_service import get_event_stats, get_recent_events
+from services.realtime_bus import realtime_bus
 
 router = APIRouter(prefix="/api", tags=["Telemetry"])
 
@@ -47,6 +48,10 @@ async def aws_resources(
     resources_payload = await aws_controller.get_aws_resources(current_user.id, db)
     resources = resources_payload.get("resources", [])
     summary = summarize_aws_resources(resources)
+    await realtime_bus.publish(
+        "resource_inventory_changed",
+        {"provider": "aws", "active_resources": summary.get("active_resources", 0), "resources": summary, "error": resources_payload.get("error")},
+    )
     return {
         "active_resources": summary.get("active_resources", 0),
         "resources": summary,
@@ -62,22 +67,24 @@ async def aws_costs(
 ):
     account = await aws_controller.get_user_aws_credentials(current_user.id, db)
     base = await aws_controller.get_aws_costs(current_user.id, db)
-    trend = []
-    if account:
-        trend = fetch_aws_cost_trend(
+    trend = (
+        fetch_aws_cost_trend(
             access_key=account.access_key,
             secret_key=account.secret_key,
             days=7,
         )
-    else:
-        trend = [{"date": str(i + 1), "cost": 0.0} for i in range(7)]
+        if account
+        else []
+    )
 
-    return {
+    payload = {
         "monthly_cost": base.get("total_cost_usd", 0.0),
         "cost_breakdown": base.get("by_service", []),
         "cost_trend_7d": trend,
         "error": base.get("error"),
     }
+    await realtime_bus.publish("cost_analysis_updated", {"provider": "aws", **payload})
+    return payload
 
 
 @router.get("/aws/dashboard")
@@ -98,27 +105,22 @@ async def aws_dashboard(
             days=7,
         )
         if account
-        else [{"date": str(i + 1), "cost": 0.0} for i in range(7)]
+        else []
     )
 
     monthly_cost = float(costs_payload.get("total_cost_usd", 0.0) or 0.0)
-    savings_potential = round(monthly_cost * 0.15, 2)
     security_score = _security_score_from_stats(security_stats)
 
+    # NOTE: Do not fabricate "savings" or recommendations.
+    # These should come from an optimization engine / rules evaluated on real telemetry.
     recs = []
-    if summary.get("ec2", 0) > 0:
-        recs.append({"title": "Right-size EC2 instances", "savings_usd": round(monthly_cost * 0.05, 2)})
-    if summary.get("rds", 0) > 0:
-        recs.append({"title": "Review RDS sizing and storage", "savings_usd": round(monthly_cost * 0.04, 2)})
-    if summary.get("s3", 0) > 0:
-        recs.append({"title": "Apply S3 lifecycle policies", "savings_usd": round(monthly_cost * 0.03, 2)})
 
-    return {
+    payload = {
         "provider": "aws",
         "monthly_cost": monthly_cost,
         "active_resources": summary.get("active_resources", 0),
         "security_score": security_score,
-        "savings_potential": savings_potential,
+        "savings_potential": 0.0,
         "resources": summary,
         "resource_distribution": _resource_distribution_from_summary(summary),
         "cost_trend_7d": trend,
@@ -126,6 +128,9 @@ async def aws_dashboard(
         "recommendations": recs,
         "errors": [x for x in [resources_payload.get("error"), costs_payload.get("error")] if x],
     }
+    await realtime_bus.publish("aws_metrics_updated", payload)
+    await realtime_bus.publish("telemetry_refresh_completed", {"provider": "aws"})
+    return payload
 
 
 @router.get("/aws/sustainability")
@@ -134,7 +139,7 @@ async def aws_sustainability(
     db: AsyncSession = Depends(get_db),
 ):
     efficiency = await energy_efficiency_controller.get_aws_energy_efficiency(current_user.id, db)
-    return {
+    payload = {
         "provider": "aws",
         "energy_efficiency": efficiency.get("efficiency_score", 0),
         "renewable_coverage": efficiency.get("renewable_coverage", 0),
@@ -146,6 +151,8 @@ async def aws_sustainability(
         "recommendations": efficiency.get("recommendations", []),
         "raw": efficiency,
     }
+    await realtime_bus.publish("sustainability_updated", payload)
+    return payload
 
 
 @router.get("/azure/resources")
@@ -162,7 +169,9 @@ async def azure_resources(
         "databases": 0,
         "active_resources": len(vms) + len(storage),
     }
-    return {"active_resources": summary["active_resources"], "resources": summary, "raw_resources": payload.get("resources", [])}
+    out = {"active_resources": summary["active_resources"], "resources": summary, "raw_resources": payload.get("resources", [])}
+    await realtime_bus.publish("resource_inventory_changed", {"provider": "azure", **out})
+    return out
 
 
 @router.get("/azure/costs")
@@ -181,14 +190,16 @@ async def azure_costs(
             days=7,
         )
         if account and account.extra_config
-        else [{"date": str(i + 1), "cost": 0.0} for i in range(7)]
+        else []
     )
-    return {
+    payload_out = {
         "monthly_cost": payload.get("total_cost_usd", 0.0),
         "cost_breakdown": payload.get("by_service", []),
         "cost_trend_7d": trend,
         "error": payload.get("error"),
     }
+    await realtime_bus.publish("cost_analysis_updated", {"provider": "azure", **payload_out})
+    return payload_out
 
 
 @router.get("/azure/dashboard")
@@ -206,7 +217,6 @@ async def azure_dashboard(
     storage = resources_payload.get("storage_accounts", [])
     active_resources = len(vms) + len(storage)
     monthly_cost = float(costs_payload.get("total_cost_usd", 0.0) or 0.0)
-    savings_potential = round(monthly_cost * 0.12, 2)
     trend = (
         azure_service.fetch_azure_cost_trend(
             subscription_id=(account.extra_config or {}).get("subscription_id") if account else None,
@@ -216,15 +226,15 @@ async def azure_dashboard(
             days=7,
         )
         if account and account.extra_config
-        else [{"date": str(i + 1), "cost": 0.0} for i in range(7)]
+        else []
     )
 
-    return {
+    out = {
         "provider": "azure",
         "monthly_cost": monthly_cost,
         "active_resources": active_resources,
         "security_score": _security_score_from_stats(security_stats),
-        "savings_potential": savings_potential,
+        "savings_potential": 0.0,
         "resources": {
             "azure_vms": len(vms),
             "azure_storage": len(storage),
@@ -240,6 +250,9 @@ async def azure_dashboard(
         "recommendations": [],
         "errors": [x for x in [resources_payload.get("error"), costs_payload.get("error")] if x],
     }
+    await realtime_bus.publish("azure_metrics_updated", out)
+    await realtime_bus.publish("telemetry_refresh_completed", {"provider": "azure"})
+    return out
 
 
 @router.get("/azure/sustainability")
@@ -248,7 +261,7 @@ async def azure_sustainability(
     db: AsyncSession = Depends(get_db),
 ):
     efficiency = await azure_efficiency_controller.get_azure_energy_efficiency(current_user.id, db)
-    return {
+    out = {
         "provider": "azure",
         "energy_efficiency": efficiency.get("efficiency_score", 0),
         "renewable_coverage": efficiency.get("renewable_coverage", 0),
@@ -259,4 +272,85 @@ async def azure_sustainability(
         "energy_consumed": efficiency.get("energy_consumed_kwh", 0),
         "recommendations": efficiency.get("recommendations", []),
         "raw": efficiency,
+    }
+    await realtime_bus.publish("sustainability_updated", out)
+    return out
+
+
+@router.get("/analytics/summary")
+async def analytics_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    High-level analytics summary used by the frontend analytics page.
+    Never fabricates data: if a provider is not connected, its values are 0 and its datasets are empty.
+    """
+    aws_costs_payload = await aws_controller.get_aws_costs(current_user.id, db)
+    azure_costs_payload = await azure_controller.get_azure_costs(current_user.id, db)
+
+    aws_monthly = float(aws_costs_payload.get("total_cost_usd", 0.0) or 0.0)
+    azure_monthly = float(azure_costs_payload.get("total_cost_usd", 0.0) or 0.0)
+    gcp_monthly = 0.0
+
+    return {
+        "total_spend": aws_monthly + azure_monthly + gcp_monthly,
+        "by_provider": {"aws": aws_monthly, "azure": azure_monthly, "gcp": gcp_monthly},
+        "errors": [x for x in [aws_costs_payload.get("error"), azure_costs_payload.get("error")] if x],
+    }
+
+
+@router.get("/analytics/trends")
+async def analytics_trends(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Provider-specific cost trends.
+    Returns separate series per provider to avoid fabricating a merged time axis.
+    """
+    aws_account = await aws_controller.get_user_aws_credentials(current_user.id, db)
+    azure_account = await azure_controller.get_user_azure_credentials(current_user.id, db)
+
+    aws_trend = (
+        fetch_aws_cost_trend(
+            access_key=aws_account.access_key,
+            secret_key=aws_account.secret_key,
+            days=days,
+        )
+        if aws_account
+        else []
+    )
+    azure_trend = (
+        azure_service.fetch_azure_cost_trend(
+            subscription_id=(azure_account.extra_config or {}).get("subscription_id") if azure_account else None,
+            tenant_id=(azure_account.extra_config or {}).get("tenant_id") if azure_account else None,
+            client_id=(azure_account.extra_config or {}).get("client_id") if azure_account else None,
+            client_secret=(azure_account.extra_config or {}).get("client_secret") if azure_account else None,
+            days=days,
+        )
+        if azure_account and azure_account.extra_config
+        else []
+    )
+
+    return {"days": days, "series": {"aws": aws_trend, "azure": azure_trend, "gcp": []}}
+
+
+@router.get("/analytics/services")
+async def analytics_services(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cost breakdown by service for each provider (current period as reported by providers).
+    """
+    aws_costs_payload = await aws_controller.get_aws_costs(current_user.id, db)
+    azure_costs_payload = await azure_controller.get_azure_costs(current_user.id, db)
+
+    return {
+        "aws": aws_costs_payload.get("by_service", []) or [],
+        "azure": azure_costs_payload.get("by_service", []) or [],
+        "gcp": [],
+        "errors": [x for x in [aws_costs_payload.get("error"), azure_costs_payload.get("error")] if x],
     }

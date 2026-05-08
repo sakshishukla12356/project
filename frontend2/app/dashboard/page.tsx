@@ -28,7 +28,8 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { telemetryApi, type DashboardPayload } from "@/src/services/api"
+import { type DashboardPayload } from "@/src/services/api"
+import { useTelemetry } from "@/src/context/TelemetryContext"
 
 const zeroDashboard: DashboardPayload = {
   provider: "aws",
@@ -50,54 +51,14 @@ const zeroDashboard: DashboardPayload = {
 }
 
 export default function DashboardPage() {
-  const [selectedProvider, setSelectedProvider] = useState<"AWS" | "Azure" | "GCP">("AWS")
-  const [awsData, setAwsData] = useState<DashboardPayload>(zeroDashboard)
-  const [azureData, setAzureData] = useState<DashboardPayload>({ ...zeroDashboard, provider: "azure" })
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const loadDashboard = async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const [aws, azure] = await Promise.all([
-        telemetryApi.getAwsDashboard(),
-        telemetryApi.getAzureDashboard(),
-      ])
-      setAwsData({
-        ...zeroDashboard,
-        ...aws,
-        resource_distribution: aws.resource_distribution?.length
-          ? aws.resource_distribution
-          : zeroDashboard.resource_distribution,
-        cost_trend_7d: aws.cost_trend_7d?.length ? aws.cost_trend_7d : zeroDashboard.cost_trend_7d,
-      })
-      setAzureData({
-        ...zeroDashboard,
-        ...azure,
-        resource_distribution: azure.resource_distribution?.length
-          ? azure.resource_distribution
-          : zeroDashboard.resource_distribution,
-        cost_trend_7d: azure.cost_trend_7d?.length ? azure.cost_trend_7d : zeroDashboard.cost_trend_7d,
-      })
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to fetch cloud telemetry")
-      setAwsData(zeroDashboard)
-      setAzureData({ ...zeroDashboard, provider: "azure" })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void loadDashboard()
-  }, [])
+  const { state, realtime, refreshAll } = useTelemetry()
+  const [selectedProvider, setSelectedProvider] = useState<"AWS" | "Azure">("AWS")
+  const isLoading = !state.lastUpdated
 
   const currentData = useMemo(() => {
-    if (selectedProvider === "Azure") return azureData
-    if (selectedProvider === "GCP") return { ...zeroDashboard, provider: "gcp" }
-    return awsData
-  }, [selectedProvider, awsData, azureData])
+    if (selectedProvider === "Azure") return state.azureDashboard
+    return state.awsDashboard
+  }, [selectedProvider, state.awsDashboard, state.azureDashboard])
 
   const stats = [
     {
@@ -145,6 +106,12 @@ export default function DashboardPage() {
           <p className="text-muted-foreground">Live cloud overview from AWS and Azure telemetry.</p>
         </div>
         <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={refreshAll} className="glass">
+            Refresh now
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {realtime.connected ? `Live: ${realtime.transport}` : "Reconnecting…"}
+          </span>
           <Button variant="outline" size="icon" className="relative">
             <Bell className="w-4 h-4" />
             <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-[10px] text-destructive-foreground flex items-center justify-center">
@@ -210,7 +177,7 @@ export default function DashboardPage() {
               <CardTitle className="flex items-center justify-between text-foreground">
                 <span>Cost Trend (7 Days)</span>
                 <div className="flex gap-2">
-                  {(["AWS", "Azure", "GCP"] as const).map((provider) => (
+                  {(["AWS", "Azure"] as const).map((provider) => (
                     <button
                       key={provider}
                       onClick={() => setSelectedProvider(provider)}
@@ -221,6 +188,13 @@ export default function DashboardPage() {
                       {provider}
                     </button>
                   ))}
+                  <button
+                    disabled
+                    className="px-2 py-1 text-xs rounded-md glass opacity-50 cursor-not-allowed"
+                    title="GCP integration coming soon"
+                  >
+                    GCP (Coming soon)
+                  </button>
                 </div>
               </CardTitle>
             </CardHeader>
@@ -378,7 +352,7 @@ export default function DashboardPage() {
                       <p className="text-sm text-foreground group-hover:text-primary transition-colors">
                         {rec.title}
                       </p>
-                      <p className="text-xs text-neon-green mt-1">Save ${rec.savings_usd}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Live telemetry</p>
                     </div>
                     <Button size="sm" variant="outline">
                       Apply
@@ -394,11 +368,11 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {error && (
+      {(currentData.errors?.length || 0) > 0 && (
         <Card className="glass-card border-border">
           <CardContent className="p-4 flex items-center justify-between">
-            <p className="text-sm text-destructive">Unable to fetch cloud telemetry: {error}</p>
-            <Button variant="outline" size="sm" onClick={loadDashboard}>
+            <p className="text-sm text-destructive">Unable to fetch cloud telemetry.</p>
+            <Button variant="outline" size="sm" onClick={refreshAll}>
               Retry
             </Button>
           </CardContent>

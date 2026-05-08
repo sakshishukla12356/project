@@ -18,29 +18,11 @@ import {
 } from "recharts"
 import { TrendingDown, DollarSign, AlertCircle, Zap } from "lucide-react"
 
-const monthlyData = [
-  { month: "Jan", aws: 45000, azure: 32000, gcp: 18000 },
-  { month: "Feb", aws: 42000, azure: 35000, gcp: 20000 },
-  { month: "Mar", aws: 48000, azure: 31000, gcp: 22000 },
-  { month: "Apr", aws: 41000, azure: 38000, gcp: 19000 },
-  { month: "May", aws: 38000, azure: 36000, gcp: 17000 },
-  { month: "Jun", aws: 35000, azure: 33000, gcp: 15000 },
-]
-
-const serviceData = [
-  { name: "EC2", value: 35 },
-  { name: "RDS", value: 25 },
-  { name: "S3", value: 20 },
-  { name: "Lambda", value: 12 },
-  { name: "Other", value: 8 },
-]
-
-const savingsData = [
-  { category: "Idle Resources", current: 12500, optimized: 2500 },
-  { category: "Reserved Instances", current: 28000, optimized: 18000 },
-  { category: "Right-sizing", current: 15000, optimized: 9000 },
-  { category: "Spot Instances", current: 8000, optimized: 3000 },
-]
+// Landing pages must not display demo production-like values.
+// Charts render empty until the user connects cloud telemetry in the dashboard.
+const monthlyData: Array<{ month: string; aws: number; azure: number; gcp: number }> = []
+const serviceData: Array<{ name: string; value: number }> = []
+const savingsData: Array<{ category: string; current: number; optimized: number }> = []
 
 const COLORS = ["#3b82f6", "#06b6d4", "#10b981", "#8b5cf6", "#6366f1"]
 
@@ -76,10 +58,10 @@ export function AnalyticsSection() {
           className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
         >
           {[
-            { icon: DollarSign, label: "Monthly Spend", value: "$95,420", change: "-12%" },
-            { icon: TrendingDown, label: "Estimated Savings", value: "$28,500", change: "+8%" },
-            { icon: AlertCircle, label: "Idle Resources", value: "47", change: "-15" },
-            { icon: Zap, label: "Optimization Score", value: "87/100", change: "+5" },
+            { icon: DollarSign, label: "Monthly Spend", value: "$0", change: "live" },
+            { icon: TrendingDown, label: "Estimated Savings", value: "$0", change: "live" },
+            { icon: AlertCircle, label: "Idle Resources", value: "0", change: "live" },
+            { icon: Zap, label: "Optimization Score", value: "0/100", change: "live" },
           ].map((stat, index) => (
             <div key={stat.label} className="glass-card rounded-xl p-4 hover:neon-glow transition-all">
               <div className="flex items-center gap-3 mb-2">
@@ -154,6 +136,9 @@ export function AnalyticsSection() {
                 </div>
               ))}
             </div>
+            {monthlyData.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-3 text-center">Connect a cloud account to view live analytics.</p>
+            )}
           </motion.div>
 
           {/* Service Distribution */}
@@ -199,6 +184,9 @@ export function AnalyticsSection() {
                 </div>
               ))}
             </div>
+            {serviceData.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-3 text-center">No telemetry available.</p>
+            )}
           </motion.div>
         </div>
 
@@ -238,6 +226,9 @@ export function AnalyticsSection() {
               <span className="text-sm text-muted-foreground">After Optimization</span>
             </div>
           </div>
+          {savingsData.length === 0 && (
+            <p className="text-xs text-muted-foreground mt-3 text-center">Optimization analytics appear after telemetry is connected.</p>
+          )}
         </motion.div>
       </div>
     </section>

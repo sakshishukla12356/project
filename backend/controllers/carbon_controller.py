@@ -5,7 +5,6 @@ Pulls latest + previous usage snapshots from DB and runs carbon calculations.
 from __future__ import annotations
 
 import logging
-import random
 from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import select, and_
@@ -96,89 +95,45 @@ async def _fetch_live_data_for_user(user_id: int, db: AsyncSession) -> list[dict
     return live_resources
 
 
-def _get_mock_data() -> list[dict]:
-    """Return mock cloud resources for testing/demo purposes."""
-    logger.info("Generating mock cloud resource data...")
-    # Add slight randomness to cost values to simulate "live" data
-    rand_variation = lambda base: round(base * random.uniform(0.9, 1.1), 2)
-    return [
-        {
-            "provider": "azure",
-            "service_type": "compute",
-            "instance_type": "Standard_D2s_v3",
-            "resource_id": "mock-azure-vm-1",
-            "resource_name": "backend-prod-vm",
-            "region": "centralindia",
-            "usage_hours": 100.0,
-            "cost_usd": rand_variation(8.2),
-            "status": "running"
-        },
-        {
-            "provider": "aws",
-            "service_type": "compute",
-            "instance_type": "m5.large",
-            "resource_id": "mock-aws-ec2-1",
-            "resource_name": "worker-node-1",
-            "region": "ap-south-1",
-            "usage_hours": 150.0,
-            "cost_usd": rand_variation(15.0),
-            "status": "running"
-        },
-        {
-            "provider": "gcp",
-            "service_type": "compute",
-            "instance_type": "n1-standard-2",
-            "resource_id": "mock-gcp-gce-1",
-            "resource_name": "data-pipeline-vm",
-            "region": "asia-south1",
-            "usage_hours": 120.0,
-            "cost_usd": rand_variation(6.0),
-            "status": "running"
-        },
-        {
-            "provider": "aws",
-            "service_type": "storage",
-            "resource_id": "mock-aws-s3-1",
-            "resource_name": "app-assets-bucket",
-            "region": "us-east-1",
-            "size_gb": 500.0,
-            "usage_hours": 720.0,
-            "cost_usd": rand_variation(11.5),
-            "status": "running"
-        }
-    ]
-
-
-async def get_total_carbon(user_id: int, db: AsyncSession, mock: bool = False) -> dict:
+async def get_total_carbon(user_id: int, db: AsyncSession) -> dict:
     """
     Return total carbon across all providers using the most recent snapshot
     stored in the database for the current user.
     If no snapshots exist yet, fetch live and compute on-the-fly.
     """
-    if mock:
-        logger.info("Mock mode enabled for get_total_carbon. Bypassing live/cached data.")
-        service_dicts = _get_mock_data()
-    else:
-        # Fetch the most recent snapshot per resource
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-        result = await db.execute(
-            select(UsageHistory)
-            .where(and_(UsageHistory.user_id == user_id, UsageHistory.recorded_at >= cutoff))
-            .order_by(UsageHistory.recorded_at.desc())
-        )
-        rows = result.scalars().all()
+    # Fetch the most recent snapshot per resource
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    result = await db.execute(
+        select(UsageHistory)
+        .where(and_(UsageHistory.user_id == user_id, UsageHistory.recorded_at >= cutoff))
+        .order_by(UsageHistory.recorded_at.desc())
+    )
+    rows = result.scalars().all()
 
-        if not rows:
-            # No cached data — fetch live using credentials securely
-            service_dicts = await _fetch_live_data_for_user(user_id, db)
-        else:
-            # Deduplicate: keep latest record per resource_id
-            seen: set[str] = set()
-            service_dicts = []
-            for row in rows:
-                if row.resource_id not in seen:
-                    seen.add(row.resource_id)
-                    service_dicts.append(_row_to_service_dict(row))
+    if not rows:
+        # No cached data — fetch live using credentials securely
+        service_dicts = await _fetch_live_data_for_user(user_id, db)
+    else:
+        # Deduplicate: keep latest record per resource_id
+        seen: set[str] = set()
+        service_dicts = []
+        for row in rows:
+            if row.resource_id not in seen:
+                seen.add(row.resource_id)
+                service_dicts.append(_row_to_service_dict(row))
+
+    if not service_dicts:
+        return {
+            "total_carbon_kg": 0.0,
+            "total_energy_kwh": 0.0,
+            "total_cost_usd": 0.0,
+            "service_count": 0,
+            "services": [],
+            "carbon_by_provider": {},
+            "carbon_by_region": {},
+            "emission_factors": get_emission_factors_table(),
+            "note": "No telemetry available. Connect a cloud account to begin monitoring.",
+        }
 
     result_obj = calculate_total_carbon(service_dicts)
 

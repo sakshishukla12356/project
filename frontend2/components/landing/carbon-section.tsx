@@ -13,39 +13,16 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
-const carbonData = [
-  { month: "Jan", emissions: 45, renewable: 20 },
-  { month: "Feb", emissions: 42, renewable: 25 },
-  { month: "Mar", emissions: 38, renewable: 30 },
-  { month: "Apr", emissions: 35, renewable: 35 },
-  { month: "May", emissions: 32, renewable: 40 },
-  { month: "Jun", emissions: 28, renewable: 45 },
-]
+const carbonData: Array<{ month: string; emissions: number; renewable: number }> = []
 
 const ecoMetrics = [
-  { icon: Leaf, label: "Carbon Emissions", value: "28 tons", change: "-18%" },
-  { icon: Zap, label: "Energy Efficiency", value: "92%", change: "+12%" },
-  { icon: Wind, label: "Renewable Percentage", value: "45%", change: "+15%" },
-  { icon: Battery, label: "Sustainability Analytics", value: "A", change: "+8%" },
+  { icon: Leaf, label: "Carbon Emissions", value: "0", change: "live" },
+  { icon: Zap, label: "Energy Efficiency", value: "0%", change: "live" },
+  { icon: Wind, label: "Renewable Coverage", value: "0%", change: "live" },
+  { icon: Battery, label: "Sustainability Analytics", value: "No Data", change: "" },
 ]
 
-const suggestions = [
-  {
-    title: "Migrate to Green Regions",
-    description: "Move workloads to AWS regions powered by renewable energy",
-    impact: "Save 15 tons CO2/year",
-  },
-  {
-    title: "Optimize Instance Types",
-    description: "Use Graviton processors for better energy efficiency",
-    impact: "Reduce energy by 40%",
-  },
-  {
-    title: "Implement Auto-Scaling",
-    description: "Scale down during off-peak hours to reduce consumption",
-    impact: "Save 8 tons CO2/year",
-  },
-]
+const suggestions: Array<{ title: string; description: string; impact?: string }> = []
 
 export function CarbonSection() {
   const ref = useRef(null)
@@ -112,9 +89,9 @@ export function CarbonSection() {
           >
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-foreground">Carbon Emissions Trend</h3>
-              <div className="flex items-center gap-2 text-neon-green text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground text-sm">
                 <TrendingDown className="w-4 h-4" />
-                <span>-38% this quarter</span>
+                <span>Live telemetry</span>
               </div>
             </div>
 
@@ -164,13 +141,16 @@ export function CarbonSection() {
             <div className="flex gap-6 mt-4 justify-center">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-destructive" />
-                <span className="text-sm text-muted-foreground">Emissions (tons)</span>
+                <span className="text-sm text-muted-foreground">Emissions</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-neon-green" />
-                <span className="text-sm text-muted-foreground">Renewable (%)</span>
+                <span className="text-sm text-muted-foreground">Renewable</span>
               </div>
             </div>
+            {carbonData.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-3 text-center">Connect a cloud account to view live carbon telemetry.</p>
+            )}
           </motion.div>
 
           {/* Sustainability Suggestions */}
@@ -188,6 +168,9 @@ export function CarbonSection() {
             </div>
 
             <div className="space-y-4">
+              {suggestions.length === 0 && (
+                <div className="text-sm text-muted-foreground">No telemetry available.</div>
+              )}
               {suggestions.map((suggestion, index) => (
                 <motion.div
                   key={suggestion.title}
@@ -208,7 +191,7 @@ export function CarbonSection() {
                   </div>
                   <div className="mt-3 flex items-center gap-2">
                     <Leaf className="w-3 h-3 text-neon-green" />
-                    <span className="text-xs text-neon-green">{suggestion.impact}</span>
+                    <span className="text-xs text-neon-green">{suggestion.impact || "Live telemetry"}</span>
                   </div>
                 </motion.div>
               ))}
@@ -228,17 +211,17 @@ export function CarbonSection() {
             <div className="relative">
               <div className="w-32 h-32 rounded-full border-4 border-neon-green/30 flex items-center justify-center">
                 <div className="text-center">
-                  <span className="text-4xl font-bold text-neon-green">A</span>
-                  <p className="text-xs text-muted-foreground mt-1">Optimized</p>
+                  <span className="text-4xl font-bold text-neon-green">—</span>
+                  <p className="text-xs text-muted-foreground mt-1">No Data</p>
                 </div>
               </div>
             </div>
             <div className="text-left space-y-2">
               <p className="text-sm text-muted-foreground">
-                Your cloud infrastructure is <span className="text-neon-green">42% more efficient</span> than baseline.
+                Sustainability analytics appear after telemetry is connected.
               </p>
               <p className="text-sm text-muted-foreground">
-                Predictive recommendations maintain a <span className="text-neon-green">top-tier sustainability profile</span>.
+                Connect cloud account(s) to begin monitoring.
               </p>
             </div>
           </div>
