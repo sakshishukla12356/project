@@ -1,3 +1,5 @@
+import API from "@/lib/api";
+
 // AUTH
 export const signup = async (data: any) => {
   const res = await API.post("/auth/signup", data);

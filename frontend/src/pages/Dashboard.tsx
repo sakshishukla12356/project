@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { DollarSign, Server, Globe, Leaf, ArrowUpRight, ArrowDownRight, Loader2, AlertCircle } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { useAWSData } from "@/hooks/useAWS";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function DashboardPage() {
   const { data, isLoading, error } = useAWSData("all");
@@ -23,7 +24,7 @@ export default function DashboardPage() {
         <div className="text-center space-y-4 glass p-8 max-w-md">
           <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
           <p className="text-sm text-muted-foreground">Failed to load AWS data. Please check your AWS credentials in Settings.</p>
-          <p className="text-xs text-muted-foreground/60">{(error as Error).message}</p>
+          <p className="text-xs text-muted-foreground/60">{getErrorMessage(error)}</p>
         </div>
       </div>
     );

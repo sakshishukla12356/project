@@ -5,6 +5,7 @@ import { Shield, ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ParticlesBackground } from "@/components/landing/ParticlesBackground";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/utils";
 import API from "../lib/api";
 
 // 🔥 Dynamic Steps
@@ -42,7 +43,7 @@ export default function ConnectAWS() {
       toast.success(`${selectedCloud} connected successfully 🚀`);
       navigate("/dashboard");
     } catch (err: any) {
-      toast.error(err.message || `Failed to connect ${selectedCloud}`);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }

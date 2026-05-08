@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ParticlesBackground } from "@/components/landing/ParticlesBackground";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -32,7 +33,7 @@ export default function SignupPage() {
       toast.success("Account created! Check your email to confirm, or sign in now.");
       navigate("/connect-aws");
     } catch (error: any) {
-      toast.error(error.message || "Failed to sign up");
+      toast.error(getErrorMessage(error));
     } finally {
       setLoading(false);
     }

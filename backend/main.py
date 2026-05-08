@@ -18,14 +18,9 @@ from fastapi.responses import JSONResponse
 
 from config.settings import get_settings
 from database.base import init_db
-from routers import auth, aws, azure, gcp, carbon, dashboard
-
-
-
-
-from routers import chatbot   # ✅ NEW (AI chatbot import)
-from routers import cloud_actions
-from routers import cloud_account
+from routers import auth, aws, azure, gcp, carbon, dashboard, chatbot, cloud_actions, cloud_account, security, energy_efficiency, sustainability
+from middleware.security_monitor import SecurityMonitorMiddleware
+from middleware.rate_limit import RateLimitMiddleware
 
 
 
@@ -86,7 +81,7 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL] if settings.APP_ENV != "development" else ["*"],
+   allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,11 +112,14 @@ app.include_router(gcp.router)
 app.include_router(carbon.router)
 app.include_router(dashboard.router)
 
+
 # AI Chatbot router
 app.include_router(chatbot.router, prefix="/ai", tags=["AI Chatbot"])
 app.include_router(cloud_actions.router, prefix="/cloud", tags=["Cloud Actions"])
 app.include_router(cloud_account.router, prefix="/cloud-account", tags=["Cloud Account"])
 app.include_router(security.router, prefix="/security", tags=["Security Dashboard"])
+app.include_router(energy_efficiency.router, prefix="/api", tags=["Energy Efficiency"])
+app.include_router(sustainability.router, prefix="/api", tags=["Sustainability"])
 
 
 

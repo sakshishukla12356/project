@@ -1,12 +1,9 @@
-<<<<<<< HEAD
-=======
 """
 routers/chatbot.py
 
 Handles AI chatbot interactions (secured).
 """
 
->>>>>>> 8d46b5d8900a7173bc7df5d73464820da1297500
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,15 +23,11 @@ router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 class ChatRequest(BaseModel):
     message: str
 
-<<<<<<< HEAD
-@router.post("/chat", dependencies=[Depends(RateLimiter(Tier.AI))])
-async def chat(request: ChatRequest):
-=======
 
 # ─────────────────────────────────────────────
 # 🤖 CHAT ENDPOINT (SECURED)
 # ─────────────────────────────────────────────
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(RateLimiter(Tier.AI))])
 async def chat(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
@@ -45,7 +38,6 @@ async def chat(
     Only authenticated users can access.
     """
 
->>>>>>> 8d46b5d8900a7173bc7df5d73464820da1297500
     response = get_ai_response(request.message)
 
     return {
