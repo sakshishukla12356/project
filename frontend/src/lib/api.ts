@@ -1,16 +1,26 @@
 import axios from "axios";
 
-const API = axios.create({
-  baseURL: "http://localhost:8000",
+const API_BASE_URL = "http://localhost:8000";
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-export const login = async (data: any) => {
-  const formData = new URLSearchParams();
-  formData.append("username", data.email);
-  formData.append("password", data.password);
-
-  const res = await API.post("/auth/login", formData);
-  return res.data;
+export const dashboardApi = {
+  getStats: () => api.get("/dashboard/stats"),
+  getCostData: () => api.get("/dashboard/cost-history"),
 };
 
-export default API;
+export const carbonApi = {
+  getFootprint: () => api.get("/carbon/footprint"),
+};
+
+export const authApi = {
+  login: (credentials: any) => api.post("/auth/login", credentials),
+  signup: (userData: any) => api.post("/auth/signup", userData),
+};
+
+export default api;

@@ -12,6 +12,7 @@ from database.base import get_db
 from middleware.auth import get_current_user
 from models.user import User
 from services.chatbot_service import get_ai_response
+from middleware.rate_limit import RateLimiter, Tier
 
 router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 
@@ -26,7 +27,7 @@ class ChatRequest(BaseModel):
 # ─────────────────────────────────────────────
 # 🤖 CHAT ENDPOINT (SECURED)
 # ─────────────────────────────────────────────
-@router.post("/chat")
+@router.post("/chat", dependencies=[Depends(RateLimiter(Tier.AI))])
 async def chat(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),

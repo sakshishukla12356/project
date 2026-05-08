@@ -48,4 +48,5 @@ async def init_db() -> None:
         import models.user          # noqa: F401
         import models.cloud_account # noqa: F401
         import models.usage_history # noqa: F401
+        import models.security_event # noqa: F401
         await conn.run_sync(Base.metadata.create_all)

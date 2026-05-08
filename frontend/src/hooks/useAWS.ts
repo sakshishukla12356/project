@@ -2,12 +2,22 @@ import { useQuery } from "@tanstack/react-query";
 import API from "../lib/api";
 
 // 🔥 Hook to fetch AWS data from backend
-export function useAWSData() {
+export function useAWSData(type: string = "all") {
   return useQuery({
-    queryKey: ["aws-data"],
+    queryKey: ["aws-data", type],
 
     queryFn: async () => {
-      const response = await API.get("/costs"); // FastAPI endpoint
+      // Map frontend request types to backend endpoints
+      const endpointMap: Record<string, string> = {
+        "all": "/aws/costs",
+        "cost-by-service": "/aws/costs",
+        "cost-daily": "/aws/costs",
+        "resources": "/aws/resources",
+        "summary": "/aws/summary"
+      };
+
+      const endpoint = endpointMap[type] || "/aws/costs";
+      const response = await API.get(endpoint);
       return response.data;
     },
 

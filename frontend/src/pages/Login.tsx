@@ -8,7 +8,8 @@ import { ParticlesBackground } from "@/components/landing/ParticlesBackground";
 import { toast } from "sonner";
 
 // ✅ IMPORT YOUR API
-import { login } from "@/lib/api";
+import { login } from "@/lib/services";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -43,7 +44,7 @@ export default function LoginPage() {
       navigate("/dashboard");
 
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Login failed");
+      toast.error(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
