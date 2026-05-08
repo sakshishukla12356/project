@@ -1,7 +1,4 @@
-"""
-main.py
-FastAPI application entry point for the Multi-Cloud Dashboard.
-"""
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -82,13 +79,7 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        settings.FRONTEND_URL.rstrip("/"),
         "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "https://localhost:3000",
-        "https://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],

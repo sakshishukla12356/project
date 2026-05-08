@@ -1,20 +1,6 @@
-"""
-routers/auth.py
-
-Enterprise-Grade Authentication Router
-
-Features:
-✔ Secure Signup
-✔ Secure Login
-✔ JWT Authentication
-✔ JSON-based Requests
-✔ Strong Validation
-✔ Production-Ready Error Handling
-✔ RBAC-Compatible
-✔ Async SQLAlchemy Support
-"""
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi.security import OAuth2PasswordRequestForm
 from middleware.rate_limit import RateLimiter, Tier
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,20 +131,20 @@ async def signup(
     dependencies=[Depends(RateLimiter(Tier.AUTH))],
 )
 async def login(
-    body: LoginRequest,
     response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Authenticate user using email + password.
-    Returns JWT token.
+    Swagger OAuth2 compatible.
     """
 
     try:
 
         result = await auth_controller.login(
-            email=body.email,
-            password=body.password,
+            email=form_data.username,
+            password=form_data.password,
             db=db,
         )
 
@@ -190,8 +176,6 @@ async def login(
             detail=f"Login error: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-
 # =========================================================
 # HEALTH CHECK
 # =========================================================
